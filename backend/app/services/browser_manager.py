@@ -234,6 +234,8 @@ class BrowserManager:
                     await self.flow_page.title()
                     if force_headed and self._flow_headless:
                         await self.close_flow_browser()
+                    elif not force_headed and not headed and not self._flow_headless:
+                        await self.close_flow_browser()
                     else:
                         return self.flow_page
                 except Exception:
@@ -297,6 +299,8 @@ class BrowserManager:
                 try:
                     await self.muse_page.title()
                     if force_headed and self._muse_headless:
+                        await self.close_muse_browser()
+                    elif not force_headed and not headed and not self._muse_headless:
                         await self.close_muse_browser()
                     else:
                         return self.muse_page

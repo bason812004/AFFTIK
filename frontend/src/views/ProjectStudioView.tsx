@@ -355,6 +355,7 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
     try {
       setRunningFullAuto(true);
       await api.runFullAuto(effectiveId);
+      await api.resumeQueue(undefined, true).catch(() => {});
       await checkPipeline(effectiveId);
     } catch (e: any) {
       alert('Lỗi kích hoạt tự động: ' + e.message);

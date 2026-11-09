@@ -281,6 +281,8 @@ class MuseAutomator:
                 const hasNeg = normNegSigs.some(sig => turnTextNorm.includes(sig));
                 if (hasNeg && !normPosSigs.some(sig => turnTextRaw.includes(sig))) continue;
 
+                try { turn.items[0].scrollIntoView({ block: 'center' }); } catch(e) {}
+
                 // Find all video presentation elements in this turn
                 const turnVideos = [];
                 const seenTurnSrcs = new Set();
@@ -289,9 +291,18 @@ class MuseAutomator:
                     const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
                     for (const el of rawVideos) {
                         if (isAvatar(el)) continue;
+                        try { el.scrollIntoView({ block: 'center' }); } catch(e) {}
 
                         const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
-                        const src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                        let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                        if (!src) {
+                            const sourceTag = el.querySelector('source');
+                            if (sourceTag) src = sourceTag.src;
+                        }
+                        if (!src) {
+                            const aTag = el.querySelector('a[href*=".mp4"], a[href*="blob:"]');
+                            if (aTag) src = aTag.href;
+                        }
                         if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
 
                         if (!seenTurnSrcs.has(src)) {
@@ -423,19 +434,20 @@ class MuseAutomator:
         muse_url = self._get_muse_url()
         login_st = await browser_manager.check_muse_login(muse_url, force_open=False)
         if not login_st.get("logged_in"):
-            await log_fn("Chưa đăng nhập Muse AI! Vui lòng đăng nhập trên cửa sổ Chrome...", 15)
-            await browser_manager.check_muse_login(muse_url, force_open=True)
-            return {
-                "success": False,
-                "needs_login": True,
-                "message": "Chưa đăng nhập Muse AI. Cửa sổ Chrome đã được mở để bạn đăng nhập."
-            }
+            saved_login = get_setting("muse_logged_in", "false")
+            if saved_login != "true":
+                await log_fn("Chưa kết nối tài khoản Muse AI...", 15)
+                return {
+                    "success": False,
+                    "needs_login": True,
+                    "message": "Chưa kết nối tài khoản Muse AI. Vui lòng bấm 'Đăng nhập' ở góc trên màn hình nếu cần đăng nhập."
+                }
 
-        await log_fn("Đã kết nối tài khoản Muse AI. Đang chuẩn bị tạo video...", 25)
+        await log_fn("Đã kết nối tài khoản Muse AI (chạy ngầm). Đang chuẩn bị tạo video...", 25)
 
-        # 3. Automation on Muse AI Page
+        # 3. Automation on Muse AI Page (100% headless hidden in background)
         try:
-            page = await browser_manager.get_muse_page(headed=False)
+            page = await browser_manager.get_muse_page(headed=False, force_headed=False)
             current_url = (page.url or "").lower()
             if "muse.ai" not in current_url:
                 await page.goto(muse_url, wait_until="domcontentloaded", timeout=30000)
@@ -533,8 +545,12 @@ class MuseAutomator:
                 elapsed = (attempt + 1) * 3
                 current_pct = min(60 + int(attempt * 0.35), 94)
 
-                # Keep bottom scrolled into view
+                # Keep bottom scrolled into view and auto-click unread messages button
                 await page.evaluate("""() => {
+                    const unreadBtn = Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').toLowerCase().includes('tin nhắn'));
+                    if (unreadBtn) {
+                        try { unreadBtn.click(); } catch (e) {}
+                    }
                     const scroller = Array.from(document.querySelectorAll('*')).find(e => e.scrollHeight > e.clientHeight + 50 && e.clientHeight > 200);
                     if (scroller) scroller.scrollTop = scroller.scrollHeight;
                     window.scrollTo(0, document.body.scrollHeight);
@@ -544,10 +560,12 @@ class MuseAutomator:
                 await page.evaluate("""() => {
                     const optionBtns = Array.from(document.querySelectorAll('button')).filter(b => {
                         const t = (b.innerText || '').toLowerCase();
-                        return t.includes('dùng ảnh nhân vật') || t.includes('làm cảnh 2') || t.includes('dùng đúng ảnh');
+                        return t.includes('dùng ảnh nhân vật') || t.includes('làm cảnh 2') || t.includes('dùng đúng ảnh') ||
+                               t.includes('tiếp tục') || t.includes('chọn ảnh') || t.includes('đồng ý') || t.includes('xác nhận') ||
+                               t.includes('bản ảnh mới') || t.includes('giữ nguyên');
                     });
                     if (optionBtns.length > 0) {
-                        optionBtns[0].click();
+                        try { optionBtns[0].click(); } catch (e) {}
                     }
                 }""")
 
@@ -624,6 +642,8 @@ class MuseAutomator:
                         const hasNeg = normNegSigs.some(sig => turnTextNorm.includes(sig));
                         if (hasNeg && !normPosSigs.some(sig => turnTextRaw.includes(sig))) continue;
 
+                        try { turn.items[0].scrollIntoView({ block: 'center' }); } catch (e) {}
+
                         const turnVideos = [];
                         const seenTurnSrcs = new Set();
 
@@ -631,9 +651,18 @@ class MuseAutomator:
                             const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
                             for (const el of rawVideos) {
                                 if (isAvatar(el)) continue;
+                                try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
 
                                 const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
-                                const src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                                let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                                if (!src) {
+                                    const sourceTag = el.querySelector('source');
+                                    if (sourceTag) src = sourceTag.src;
+                                }
+                                if (!src) {
+                                    const aTag = el.querySelector('a[href*=".mp4"], a[href*="blob:"]');
+                                    if (aTag) src = aTag.href;
+                                }
                                 if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
 
                                 if (!seenTurnSrcs.has(src)) {
@@ -762,6 +791,8 @@ class MuseAutomator:
                                 const hasPos = normPosSigs.some(sig => turnTextNorm.includes(sig));
                                 if (!hasPos) continue;
 
+                                try { turn.items[0].scrollIntoView({ block: 'center' }); } catch (e) {}
+
                                 const turnVideos = [];
                                 const seenTurnSrcs = new Set();
 
@@ -769,9 +800,18 @@ class MuseAutomator:
                                     const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
                                     for (const el of rawVideos) {
                                         if (isAvatar(el)) continue;
+                                        try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
 
                                         const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
-                                        const src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                                        let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                                        if (!src) {
+                                            const sourceTag = el.querySelector('source');
+                                            if (sourceTag) src = sourceTag.src;
+                                        }
+                                        if (!src) {
+                                            const aTag = el.querySelector('a[href*=".mp4"], a[href*="blob:"]');
+                                            if (aTag) src = aTag.href;
+                                        }
                                         if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
 
                                         if (!seenTurnSrcs.has(src)) {
@@ -874,7 +914,7 @@ class MuseAutomator:
             return {"success": False, "error": f"Không tìm thấy dự án {project_id}"}
 
         pname = proj["name"]
-        page = await browser_manager.get_muse_page(headed=False)
+        page = await browser_manager.get_muse_page(headed=False, force_headed=False)
         current_url = (page.url or "").lower()
         if "muse.ai" not in current_url:
             await page.goto(self._get_muse_url(), wait_until="domcontentloaded", timeout=30000)
