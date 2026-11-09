@@ -961,6 +961,26 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
     }
   };
 
+  const [pullingMuse, setPullingMuse] = useState(false);
+  const handlePullFromMuse = async () => {
+    if (!effectiveId) return;
+    setPullingMuse(true);
+    try {
+      const res = await api.pullMuseVideos(effectiveId);
+      if (res.success) {
+        await loadProject(true);
+        if (onRefreshStatus) onRefreshStatus();
+        alert(res.message || 'Đã lấy thành công video từ Muse AI!');
+      } else {
+        alert(res.message || 'Không tìm thấy video nào của sản phẩm này trên Muse AI.');
+      }
+    } catch (e: any) {
+      alert('Lỗi lấy video từ Muse AI: ' + e.message);
+    } finally {
+      setPullingMuse(false);
+    }
+  };
+
   const [importingVideo1, setImportingVideo1] = useState(false);
   const [importingVideo2, setImportingVideo2] = useState(false);
 
@@ -3485,8 +3505,29 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
                 <span>Bước 3: Tạo 2 Video Cảnh (Tự Động Muse AI / Google Flow Hoặc Dán / Tải Thủ Công)</span>
               </h3>
               <p className="text-xs text-slate-400">
-                Bạn có thể tự động gửi sang Google Flow, hoặc kéo thả / dán 2 video từ nền tảng khác vào và bấm Ghép ngay bên dưới.
+                Bạn có thể tự động tạo video với Muse AI / Google Flow, hoặc lấy video đã tạo từ Muse AI về ghép ngay.
               </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handlePullFromMuse}
+                disabled={pullingMuse}
+                className="px-4 py-2 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-950/40"
+                title="Quét tìm và lấy video Cảnh 1 & Cảnh 2 đã tạo trên Muse AI để ghép ngay"
+              >
+                {pullingMuse ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                    <span>Đang lấy từ Muse AI...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 text-emerald-400" />
+                    <span>📥 Lấy Video từ Muse AI &amp; Ghép Ngay</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -3911,6 +3952,26 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handlePullFromMuse}
+                disabled={pullingMuse}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 transition-all shadow-md"
+                title="Lấy video gốc Cảnh 1 & Cảnh 2 từ Muse AI về ghép lại chuẩn 60 FPS"
+              >
+                {pullingMuse ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                    <span>Đang lấy Muse AI...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 text-emerald-400" />
+                    <span>📥 Lấy Video từ Muse AI</span>
+                  </>
+                )}
+              </button>
+
               <button
                 onClick={handleStitch}
                 disabled={stitching || !hasBothVideos}

@@ -344,6 +344,12 @@ class BrowserManager:
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             """)
 
+            if (self.muse_page.url or "").lower() == "about:blank":
+                try:
+                    await self.muse_page.goto("https://muse.ai", wait_until="domcontentloaded", timeout=25000)
+                except Exception:
+                    pass
+
             return self.muse_page
 
     async def _extract_account_info(

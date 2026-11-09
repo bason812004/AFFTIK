@@ -462,6 +462,26 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
               <Download className="w-3.5 h-3.5" />
             </button>
             <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  const res = await api.pullMuseVideos(p.id);
+                  if (res.success) {
+                    alert(res.message || 'Đã lấy thành công video từ Muse AI!');
+                    await loadProjects();
+                  } else {
+                    alert(res.message || 'Không tìm thấy video nào của sản phẩm này trên Muse AI.');
+                  }
+                } catch (err: any) {
+                  alert('Lỗi: ' + err.message);
+                }
+              }}
+              title="Quét lấy video đã tạo từ Muse AI về ghép 60 FPS ngay"
+              className="p-1.5 rounded-lg text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={(e) => handleDelete(e, p.id, p.name)}
               title="Xóa dự án"
               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
@@ -521,6 +541,24 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
           >
             {uploadingBatch ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
             <span>📥 Thêm 1 Hoặc Nhiều Ảnh Vào Hàng Đợi</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await api.pullAllMuseVideos();
+                alert(`Đã cập nhật ${res.total_updated || 0} dự án từ video Muse AI!`);
+                await loadProjects();
+              } catch (e: any) {
+                alert('Lỗi: ' + e.message);
+              }
+            }}
+            className="px-3.5 py-2.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-md"
+            title="Quét toàn bộ lịch sử Muse AI và lấy tất cả video đã tạo về ghép tự động 60 FPS"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span>📥 Lấy Video Muse AI</span>
           </button>
 
           <button

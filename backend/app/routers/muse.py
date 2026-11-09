@@ -84,6 +84,23 @@ async def upload_manual_video(
         "message": f"Đã nạp và chuẩn hóa video Cảnh {scene_number} (1080x1920 @ 60 FPS)"
     }
 
+@router.post("/pull-videos/{project_id}")
+async def pull_project_videos(project_id: str):
+    """
+    Scans Muse AI chat for this project's videos, downloads them, standardizes to 60 FPS,
+    and stitches them into the final video!
+    """
+    res = await muse_automator.pull_project_videos(project_id)
+    return res
+
+@router.post("/pull-all-available")
+async def pull_all_available_videos():
+    """
+    Scans all projects in DB and pulls any matching completed videos from Muse AI.
+    """
+    res = await muse_automator.pull_all_available_videos()
+    return res
+
 @router.delete("/video/{project_id}/{scene_number}")
 async def delete_scene_video(project_id: str, scene_number: int):
     target_path = PROJECTS_DIR / project_id / "videos" / f"scene{scene_number}.mp4"

@@ -391,6 +391,20 @@ export const api = {
     return handleResponse(res);
   },
 
+  async pullMuseVideos(projectId: string) {
+    const res = await fetch(`${API_BASE}/muse/pull-videos/${projectId}`, {
+      method: 'POST'
+    });
+    return handleResponse(res);
+  },
+
+  async pullAllMuseVideos() {
+    const res = await fetch(`${API_BASE}/muse/pull-all-available`, {
+      method: 'POST'
+    });
+    return handleResponse(res);
+  },
+
   async uploadManualVideo(projectId: string, sceneNumber: 1 | 2, file: File) {
     const fd = new FormData();
     fd.append('project_id', projectId);
