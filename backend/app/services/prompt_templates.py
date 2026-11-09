@@ -5,97 +5,41 @@ DEFAULT_SYSTEM_PROMPTS = [
     {
         "id": "sys_prompt_char_gen",
         "category": "character_gen",
-        "title": "Tạo ảnh nhân vật thương mại đứng cùng sản phẩm (Chuẩn cửa hàng 9:16)",
+        "title": "Tạo ảnh nhân vật thương mại đứng cùng sản phẩm (Chuẩn cửa hàng / Tổng kho xưởng 9:16)",
         "variables": ["product_name", "category", "description", "benefits", "target_customer"],
         "content": """Tạo ảnh quảng cáo sản phẩm siêu chân thực 8K, tỷ lệ dọc 9:16, phong cách chụp ảnh thương mại cao cấp, sang trọng, chuyên nghiệp, giống ảnh chụp thực tế bằng máy ảnh full-frame chuyên nghiệp với ống kính 50mm.
 
-## 1. BỐI CẢNH CỬA HÀNG PHÙ HỢP VỚI SẢN PHẨM ({{category}})
+## 1. BỐI CẢNH CỬA HÀNG HOẶC TỔNG KHO XƯỞNG PHÙ HỢP VỚI SẢN PHẨM ({{category}})
 
-Dựa hoàn toàn vào hình ảnh sản phẩm tham chiếu (Tên sản phẩm: {{product_name}} - Ngành hàng: {{category}} - Công dụng: {{benefits}}) để thiết kế một cửa hàng/showroom trưng bày có phong cách, công năng và cách bố trí phù hợp với chính sản phẩm đó. Không sử dụng bối cảnh cửa hàng chung chung hoặc không liên quan đến sản phẩm.
+Dựa hoàn toàn vào hình ảnh sản phẩm tham chiếu (Tên sản phẩm: {{product_name}} - Ngành hàng: {{category}} - Công dụng: {{benefits}}) để thiết kế một cửa hàng/showroom trưng bày hoặc tổng kho xưởng xuất nhập hàng hiện đại, sạch sẽ, quy mô lớn phù hợp với chính sản phẩm đó.
+- Nếu bối cảnh là tổng kho xưởng: Phía sau là các dãy kệ chứa hàng pallet lớn xếp hàng hóa ngăn nắp, quy củ, ánh sáng sáng rõ, thể hiện nguồn hàng xuất xưởng tận gốc không qua trung gian, mang lại cảm giác giá kho xưởng rẻ nhất thị trường.
+- Nếu bối cảnh là cửa hàng/showroom: Thiết kế hiện đại, cao cấp, sạch sẽ, rộng rãi và chuyên nghiệp. Màu sắc nội thất, vật liệu trang trí, quầy trưng bày, kệ sản phẩm hài hòa với sản phẩm.
 
-Cửa hàng có thiết kế hiện đại, cao cấp, sạch sẽ, rộng rãi và chuyên nghiệp. Màu sắc nội thất, vật liệu trang trí, quầy trưng bày, kệ sản phẩm và các chi tiết xung quanh phải hài hòa với màu sắc, kiểu dáng và phân khúc của sản phẩm tham chiếu.
-
-Bố trí khu vực trưng bày sản phẩm nổi bật ở tiền cảnh. Phía sau là các kệ trưng bày hoặc những sản phẩm cùng dòng, cùng nhóm hàng phù hợp với sản phẩm chính. Các sản phẩm phụ chỉ đóng vai trò tạo không gian cửa hàng chân thực, không được lấn át sản phẩm chính. Không tự ý thêm những mặt hàng không liên quan.
-
-Không gian có chiều sâu tự nhiên, bố cục gọn gàng, tinh tế, thể hiện hình ảnh một cửa hàng uy tín với phong cách thương hiệu cao cấp. Có thể bổ sung quầy tư vấn, tủ trưng bày và bảng thông tin sản phẩm phù hợp với ngành hàng, nhưng không để các chi tiết này che khuất sản phẩm chính.
+Bố trí khu vực trưng bày sản phẩm nổi bật ở tiền cảnh trên bàn hoặc bục kiểm hàng. Phía sau là các kiện hàng hoặc sản phẩm phụ tạo không gian chân thực, không được lấn át sản phẩm chính. Không tự ý thêm mặt hàng không liên quan.
 
 ## 2. KHÓA SẢN PHẨM – BẮT BUỘC GIỮ NGUYÊN 100%
 
 Sử dụng chính xác sản phẩm trong hình ảnh tham chiếu (Tên sản phẩm: {{product_name}}). Giữ nguyên tuyệt đối hình dáng, kích thước, tỷ lệ, màu sắc, chất liệu, cấu trúc, thiết kế, logo, chữ viết và toàn bộ chi tiết gốc.
-
 Tuyệt đối không thiết kế lại, không thay đổi màu sắc, không bóp méo, không kéo giãn, không làm biến dạng, không thêm hoặc xóa bất kỳ chi tiết nào trên sản phẩm.
+Đặt sản phẩm trên một bàn trưng bày hoặc bục kiểm hàng ở tiền cảnh, gần máy ảnh, chiếm vị trí nổi bật, nhìn thấy đầy đủ từ trên xuống dưới và từ trái sang phải, không bị cắt mất bất kỳ phần nào.
 
-Đặt sản phẩm trên một bàn trưng bày cao cấp hoặc bục trưng bày sang trọng phù hợp với kích thước và công năng của sản phẩm. Sản phẩm nằm ở tiền cảnh, gần máy ảnh, chiếm vị trí nổi bật, nhìn thấy đầy đủ từ trên xuống dưới và từ trái sang phải, không bị cắt mất bất kỳ phần nào.
+## 3. NGƯỜI MẪU / ĐẠI DIỆN THƯƠNG HIỆU & KHO XƯỞNG
 
-Sản phẩm có kích thước chân thực, nổi bật nhưng không phóng đại quá mức. Mặt trước sản phẩm hướng thẳng về phía máy ảnh, hạn chế góc nghiêng để thấy rõ thiết kế, logo và các chi tiết.
-
-## 3. NGƯỜI MẪU NỮ CAO CẤP
-
-Một người mẫu nữ Việt Nam 21 tuổi, xinh đẹp nổi bật, gương mặt thanh tú, đường nét hài hòa, đôi mắt sáng có thần, làn da tự nhiên, mái tóc được tạo kiểu tinh tế và lớp trang điểm nhẹ nhàng sang trọng.
-
-Người mẫu mặc đồng phục nhân viên cửa hàng cao cấp, thiết kế hiện đại, thanh lịch, màu sắc hài hòa với sản phẩm và không gian cửa hàng. Trang phục chỉn chu, vừa vặn, chất liệu chân thực.
-
-Người mẫu đứng sát bên cạnh hoặc hơi phía sau sản phẩm, ở vị trí gần máy ảnh. Một tay nhẹ nhàng giới thiệu sản phẩm, tay còn lại tạo dáng tự nhiên. Nụ cười thân thiện, ánh mắt tự tin, thần thái chuyên nghiệp như người đại diện thương hiệu trong chiến dịch quảng cáo cao cấp.
-
-Khuôn mặt, đôi mắt, mái tóc, trang phục và bàn tay của người mẫu phải rõ nét, tự nhiên, chân thực; không làm mịn da quá mức, không tạo gương mặt giả hoặc biểu cảm cứng đờ.
+Một người mẫu (nữ hoặc nam) Việt Nam 20-25 tuổi, gương mặt sáng sủa, thanh tú, đôi mắt sáng có thần, nụ cười thân thiện, làn da tự nhiên và mái tóc chỉn chu.
+Người mẫu mặc trang phục đại diện thương hiệu hoặc đồng phục nhân viên tổng kho xưởng hiện đại (áo thun polo thanh lịch, trang phục gọn gàng năng động), màu sắc hài hòa với không gian và sản phẩm.
+Người mẫu đứng sát bên cạnh sản phẩm ở vị trí gần máy ảnh, một tay chỉ hoặc mở lòng bàn tay hướng về sản phẩm giới thiệu với phong thái hào sảng, tự tin như đang livestream giới thiệu nguồn hàng giá xuất xưởng rẻ tận gốc. Ánh mắt nhìn thẳng vào ống kính máy ảnh giao tiếp chân thực với người xem.
 
 ## 4. BỐ CỤC VÀ KHOẢNG CÁCH MÁY ẢNH
 
 Khung hình dọc 9:16, góc máy chính diện, bố cục quảng cáo thương mại chuyên nghiệp.
+Đưa sản phẩm và người mẫu lại gần máy ảnh hơn, tạo cảm giác gần gũi và nổi bật. Sản phẩm chiếm phần lớn tiền cảnh nhưng vẫn giữ nguyên tỷ lệ thực tế.
+Người mẫu xuất hiện ở góc chụp từ thắt lưng trở lên (medium shot) hoặc gần hơn (medium close-up), thấy rõ biểu cảm gương mặt tươi tắn và sự tương tác tự nhiên với sản phẩm.
 
-Đưa sản phẩm và người mẫu lại gần máy ảnh hơn, tạo cảm giác gần gũi và nổi bật. Sản phẩm chiếm phần lớn tiền cảnh nhưng vẫn giữ nguyên tỷ lệ thực tế và hài hòa với người mẫu.
+## 5. ÁNH SÁNG, MÀU SẮC VÀ ĐỘ NÉT 8K
 
-Người mẫu xuất hiện ở góc chụp từ thắt lưng trở lên (medium shot) hoặc gần hơn (medium close-up), vừa đủ để thấy rõ biểu cảm gương mặt, trang phục, cử chỉ tay và sự tương tác tự nhiên với sản phẩm.
-
-Toàn bộ bố cục phải cân đối, hài hòa, hướng toàn bộ sự chú ý của người xem vào sản phẩm và người mẫu.
-
-## 5. TƯƠNG TÁC VÀ ĐẶT SẢN PHẨM
-
-Sản phẩm được đặt chắc chắn trên bàn trưng bày hoặc bục trưng bày cao cấp ở tiền cảnh.
-
-Người mẫu đứng ngay cạnh sản phẩm, mở lòng bàn tay hướng về sản phẩm như đang tư vấn cho khách hàng, hoặc một tay đặt nhẹ lên cạnh bàn gần sản phẩm (không chạm hoặc che bất kỳ chi tiết, logo hay chữ viết nào trên sản phẩm).
-
-Tư thế đứng thẳng, phong thái tự tin, thanh lịch và cuốn hút. Ánh mắt nhìn thẳng vào ống kính máy ảnh như đang giao tiếp trực tiếp với người xem TikTok.
-
-Tạo cảm giác chân thực như một bức ảnh chụp thực tế trong chiến dịch quảng cáo chính thức của thương hiệu.
-
-## 6. ÁNH SÁNG VÀ MÀU SẮC
-
-Hệ thống ánh sáng studio thương mại chuyên nghiệp, kết hợp ánh sáng chính (key light) mềm mại, ánh sáng phụ (fill light) dịu nhẹ và ánh sáng viền (rim light) tinh tế, làm nổi bật đường nét của sản phẩm và người mẫu.
-
-Ánh sáng cửa hàng ấm áp, tự nhiên, sang trọng, tạo cảm giác cao cấp và chuyên nghiệp.
-
-Không có bóng gắt khó chịu, không bị cháy sáng, không bị tối mờ bất kỳ chi tiết quan trọng nào trên sản phẩm và khuôn mặt người mẫu.
-
-Màu sắc trung thực, tươi sáng, độ tương phản vừa phải, bão hòa tự nhiên, mang lại cảm giác dễ chịu và thu hút người xem ngay từ cái nhìn đầu tiên.
-
-## 7. ĐỘ CHI TIẾT VÀ CHẤT LƯỢNG HÌNH ẢNH
-
-Chất lượng ảnh siêu cao 8K, độ nét cực cao, rõ từng chi tiết nhỏ nhất trên sản phẩm (chữ in, logo, kết cấu bề mặt, đường nét thiết kế, vật liệu bao bì).
-
-Chi tiết da của người mẫu tự nhiên, thấy rõ lỗ chân lông mịn, kết cấu da thật, từng sợi tóc mượt mà, ánh mắt có thần, phản chiếu ánh sáng chân thực.
-
-Không có hiện tượng da sáp, không bị bóng nhờn phi tự nhiên, không mang cảm giác nhân vật 3D hoặc tranh vẽ AI.
-
-Độ sâu trường ảnh (depth of field) nông tinh tế: sản phẩm và người mẫu sắc nét từng chi tiết; hậu cảnh cửa hàng phía sau mờ nhẹ tự nhiên (bokeh mềm mại), làm tăng chiều sâu không gian mà vẫn nhận biết rõ đó là một cửa hàng cao cấp phù hợp với sản phẩm.
-
-## 8. YÊU CẦU ĐẶC BIỆT VỀ CHỮ VÀ VĂN BẢN
-
-Giữ nguyên 100% chữ viết, logo và nhãn hiệu có sẵn trên sản phẩm gốc trong ảnh tham chiếu. Đảm bảo chữ trên sản phẩm rõ nét, đọc được, không bị nhòe, không biến dạng, không sai chính tả.
-
-Ngoại trừ chữ có sẵn trên sản phẩm gốc và các biển hiệu cửa hàng mờ phía sau nếu có, TUYỆT ĐỐI KHÔNG tự ý thêm bất kỳ chữ viết, văn bản, slogan, phụ đề, biểu tượng giá tiền, hình dán hay watermark nào khác vào khung hình.
-
-Hình ảnh hoàn toàn sạch sẽ, mang phong cách ảnh chụp thương mại thuần túy, chuyên nghiệp và sang trọng.
-
-## 9. QUY TẮC AN TOÀN – BẮT BUỘC TUÂN THỦ
-
-Không tạo ngón tay thừa, không tạo ngón tay thiếu, không làm dị dạng bàn tay, không vẽ mắt méo, không làm lệch đồng tử, không làm biến dạng tỷ lệ cơ thể của người mẫu.
-
-Không làm sai lệch màu sắc, hình dáng, cấu trúc hoặc bất kỳ chi tiết nào của sản phẩm tham chiếu.
-
-Không để bối cảnh cửa hàng lộn xộn, không để các chi tiết hậu cảnh làm phân tán sự chú ý khỏi sản phẩm chính.
-
-Không sử dụng phong cách hoạt hình, 3D render, anime hay tranh vẽ minh họa. Bắt buộc phải là ảnh chụp thực tế (photorealistic photography)."""
+Hệ thống ánh sáng studio thương mại chuyên nghiệp, ánh sáng ấm áp, tự nhiên, rõ ràng từng chi tiết sản phẩm và khuôn mặt người mẫu.
+Chất lượng ảnh siêu cao 8K, độ nét cực cao, rõ từng chi tiết nhỏ nhất trên sản phẩm (chữ in, logo, chất liệu bề mặt).
+Không có ngón tay thừa/thiếu, không biến dạng cơ thể. Bắt buộc là ảnh chụp thực tế (photorealistic photography), không sử dụng phong cách hoạt hình 3D."""
     },
     {
         "id": "sys_prompt_script_gen",
@@ -112,32 +56,32 @@ Giá bán & Ưu đãi: {{price}} ({{offer}})
 Hãy viết kịch bản Veo 3 với 2 cảnh (mỗi cảnh 10 giây, tổng 20 giây) bám sát 100% công dụng thực tế, cấu tạo và đối tượng khách hàng của sản phẩm {{product_name}} trong ảnh tham chiếu:
 - Mỗi cảnh dài tối thiểu 42 từ trở lên (42 - 50 từ), câu văn trọn vẹn 100% đọc hết vừa vặn trong 10 giây (tuyệt đối không cắt ngang câu).
 - Nói rõ đúng công dụng thực tế ({{benefits}}) và đặc điểm nổi bật ({{highlights}}) của sản phẩm {{product_name}}, không viết chung chung.
-- Câu mở đầu đánh trúng nhu cầu/nỗi đau của khách hàng đối với sản phẩm {{product_name}}, Cảnh 2 có chốt đơn khéo léo ở giỏ hàng góc trái màn hình.
+- ĐẶC BIỆT CÓ GÓC KHO XƯỞNG GIÁ RẺ: Nhân vật đứng tại tổng kho xưởng, nói hào sảng về nguồn hàng xuất trực tiếp từ kho xưởng tận gốc không qua trung gian nên giá rẻ bất ngờ, xả kho ưu đãi sập sàn. Cảnh 2 có chốt đơn khéo léo ở giỏ hàng góc trái màn hình nhận freeship.
 - Prompt tạo video Cảnh 1 và Cảnh 2 phải mô tả cụ thể cử chỉ nhân vật tương tác với đúng các bộ phận/chi tiết của {{product_name}} và góc máy lấy nét cận cảnh đúng đặc điểm của {{product_name}} tại Cảnh 2 (khóa chặt 100% sản phẩm trong ảnh tham chiếu không bị biến dạng).
 
 ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
 
-### PHƯƠNG ÁN A: [Đánh vào nhu cầu & công dụng thực tế của {{product_name}}]
-**Ý tưởng và hook:** [Tóm tắt ngắn]
+### PHƯƠNG ÁN A: [Góc Kho Xưởng Giá Rẻ Tận Gốc - {{product_name}}]
+**Ý tưởng và hook:** [Quay trực tiếp tại tổng kho xưởng, xả hàng giá xưởng rẻ tận gốc không qua trung gian]
 
 **CẢNH 1**
-- Lời thoại: [Tối thiểu 42 từ tiếng Việt (42-50 từ), trọn câu đọc hết trong 10s]
+- Lời thoại: [Tối thiểu 42 từ tiếng Việt (42-50 từ), trọn câu đọc hết trong 10s, giới thiệu giá kho xưởng rẻ & công dụng]
 - Bộ đếm: [Số từ] từ
-- Prompt Veo 3: [Prompt Veo 3 chi tiết bằng tiếng Việt riêng cho {{product_name}}, mô tả rõ cử chỉ giới thiệu công dụng và khóa 100% ảnh tham chiếu]
+- Prompt Veo 3: [Prompt Veo 3 chi tiết bằng tiếng Việt riêng cho {{product_name}}, nhân vật đứng tại kho xưởng giới thiệu giá xưởng & công dụng, khóa 100% ảnh tham chiếu]
 
 **CẢNH 2**
-- Lời thoại: [Tối thiểu 42 từ tiếng Việt (42-50 từ), trọn câu đọc hết trong 10s, nhắc giỏ hàng góc trái màn hình]
+- Lời thoại: [Tối thiểu 42 từ tiếng Việt (42-50 từ), trọn câu đọc hết trong 10s, cận cảnh chất lượng và giục bấm giỏ hàng góc trái nhận giá xuất xưởng]
 - Bộ đếm: [Số từ] từ
 - Prompt Veo 3: [Prompt Veo 3 chi tiết bằng tiếng Việt riêng cho {{product_name}}, camera tiến chậm cận cảnh chi tiết sản phẩm, khóa sản phẩm không bị biến dạng]"""
     },
     {
         "id": "sys_prompt_veo3_scene1",
         "category": "veo3_scene1",
-        "title": "Mẫu Prompt Veo 3 - Cảnh 1 (Hook & Giới thiệu công dụng theo sản phẩm)",
+        "title": "Mẫu Prompt Veo 3 - Cảnh 1 (Hook Giá Kho Xưởng & Giới thiệu công dụng theo sản phẩm)",
         "variables": ["character_description", "product_name", "category", "benefits", "dialogue_1"],
-        "content": """[Cảnh 1 - Giới thiệu công dụng {{product_name}} ({{category}}) | 9:16, 10s, 60fps]
-Nhân vật nữ Việt Nam từ ảnh tham chiếu mỉm cười tươi tắn, chỉ tay trực tiếp giới thiệu sản phẩm {{product_name}} đang đặt trên bàn trưng bày ở tiền cảnh, nhấn mạnh vào công dụng ({{benefits}}).
-Chuyển động trực tiếp từ đúng khung hình ảnh tham chiếu đính kèm: giữ nguyên 100% nhân vật, bối cảnh cửa hàng ({{category}}) và đúng sản phẩm {{product_name}} trong ảnh tham chiếu (tuyệt đối không đổi màu sắc, kiểu dáng hay tự sinh ra sản phẩm khác).
+        "content": """[Cảnh 1 - Giá kho xưởng rẻ & Giới thiệu công dụng {{product_name}} ({{category}}) | 9:16, 10s, 60fps]
+Nhân vật Việt Nam từ ảnh tham chiếu mỉm cười tươi tắn, tự tin đứng tại bối cảnh tổng kho xưởng / showroom trưng bày với các kệ hàng hóa quy mô lớn phía sau, chỉ tay trực tiếp giới thiệu sản phẩm {{product_name}} đang đặt trên bàn kiểm hàng ở tiền cảnh, nói về giá xuất xưởng rẻ tận gốc không qua trung gian và công dụng vượt trội ({{benefits}}).
+Chuyển động trực tiếp từ đúng khung hình ảnh tham chiếu đính kèm: giữ nguyên 100% nhân vật, bối cảnh tổng kho xưởng ({{category}}) và đúng sản phẩm {{product_name}} trong ảnh tham chiếu (tuyệt đối không đổi màu sắc, kiểu dáng hay tự sinh ra sản phẩm khác).
 Nhân vật nói tiếng Việt giọng miền Bắc tự nhiên, khẩu hình miệng khớp hoàn hảo với lời thoại trong 10 giây:
 "{{dialogue_1}}"
 Không chữ trên màn hình, không phụ đề, không watermark."""
@@ -145,14 +89,22 @@ Không chữ trên màn hình, không phụ đề, không watermark."""
     {
         "id": "sys_prompt_veo3_scene2",
         "category": "veo3_scene2",
-        "title": "Mẫu Prompt Veo 3 - Cảnh 2 (Cận cảnh chi tiết sản phẩm & Chốt đơn)",
+        "title": "Mẫu Prompt Veo 3 - Cảnh 2 (Cận cảnh chi tiết sản phẩm & Chốt đơn giá xuất xưởng)",
         "variables": ["character_description", "product_name", "category", "highlights", "dialogue_2"],
-        "content": """[Cảnh 2 - Cận cảnh chi tiết {{product_name}} & Chốt đơn | 9:16, 10s, 60fps]
-Máy quay tiến chậm lấy nét cận cảnh (slow smooth push-in) làm nổi bật chi tiết sản phẩm {{product_name}} ({{highlights}}), nhân vật mỉm cười duyên dáng hướng dẫn khách đặt mua.
+        "content": """[Cảnh 2 - Cận cảnh chi tiết {{product_name}} & Chốt đơn giá xuất xưởng | 9:16, 10s, 60fps]
+Máy quay tiến chậm lấy nét cận cảnh (slow smooth push-in) làm nổi bật chi tiết chất liệu chuẩn xưởng của {{product_name}} ({{highlights}}), nhân vật mỉm cười duyên dáng, chỉ vào sản phẩm rồi chỉ xuống giỏ hàng góc trái màn hình kêu gọi đặt mua nhận giá ưu đãi xuất xưởng kèm freeship tận nhà.
 Tiếp tục trực tiếp từ đúng khung hình ảnh tham chiếu đính kèm: giữ nguyên 100% nhân vật, bối cảnh ({{category}}) và khóa 100% thiết kế, màu sắc, nhãn mác thật của sản phẩm {{product_name}} trong ảnh tham chiếu, không biến dạng.
 Nhân vật nói tiếng Việt giọng miền Bắc truyền cảm, khẩu hình miệng khớp hoàn hảo với lời thoại trong 10 giây:
 "{{dialogue_2}}"
 Không chữ trên màn hình, không phụ đề, không watermark."""
+    },
+    {
+        "id": "sys_prompt_warehouse_variant",
+        "category": "warehouse_variant",
+        "title": "Mẫu Nhân Bản Video - Bối cảnh Kho Xưởng Giá Rẻ Tận Gốc",
+        "variables": ["product_name", "category", "benefits", "highlights", "price", "offer"],
+        "content": """[Kịch bản Nhân bản Video Kho Xưởng - {{product_name}}]
+Nhân vật quay trực tiếp tại tổng kho xưởng xuất nhập hàng, cầm/chỉ vào {{product_name}}, khẳng định hàng chính hãng xuất thẳng từ kho xưởng không qua trung gian, bao giá rẻ tận gốc, chất lượng chuẩn xưởng và kêu gọi chốt đơn tại giỏ hàng góc trái."""
     },
     {
         "id": "sys_prompt_dialogue_fix",

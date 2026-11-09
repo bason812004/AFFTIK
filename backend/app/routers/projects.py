@@ -1699,5 +1699,150 @@ async def paste_clipboard_image(
         }
 
 
+@router.post("/{project_id}/clone-video-variant")
+async def clone_video_variant(
+    project_id: str,
+    auto_run: bool = True,
+    db = Depends(get_db)
+):
+    """
+    Creates a new product video variant (Nhân bản video sản phẩm):
+    - Re-uses product image (product_original.jpg) and core product info.
+    - Sets project title to '[Product Name] (Bản kho xưởng #N)'.
+    - Generates new warehouse character image in warehouse setting.
+    - Generates new warehouse pricing scripts (≥ 42 words, 10s: quay tại tổng kho xưởng, giá xuất xưởng rẻ tận gốc).
+    - Clears all previous videos/exports so brand new distinct 2 scenes are generated.
+    - If auto_run=True, enqueues to pipeline_runner.enqueue_batch and immediately starts production!
+    """
+    import re
+    import logging
+    _log = logging.getLogger(__name__)
+
+    cur = await db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
+    orig_proj = await cur.fetchone()
+    if not orig_proj:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dự án gốc để nhân bản.")
+    
+    orig_dict = dict(orig_proj)
+    raw_name = orig_dict.get("name") or "Sản phẩm chính hãng"
+    base_name = re.sub(r"\s*\(Bản kho xưởng\s*#?\d*\)", "", raw_name).strip()
+    if not base_name:
+        base_name = "Sản phẩm chính hãng"
+
+    # Count existing variants of this product
+    v_cur = await db.execute("SELECT COUNT(*) FROM projects WHERE name LIKE ?", (f"{base_name} (Bản kho xưởng%",))
+    count_existing = (await v_cur.fetchone())[0]
+    variant_num = count_existing + 1
+    new_name = f"{base_name} (Bản kho xưởng #{variant_num})"
+
+    new_project_id = str(uuid.uuid4())[:8]
+    create_project_folders(new_project_id)
+
+    # Copy original product image
+    orig_img = orig_dict.get("original_image_path")
+    if not orig_img or not os.path.exists(orig_img):
+        cands = list((PROJECTS_DIR / project_id / "product").glob("*"))
+        if cands:
+            orig_img = str(cands[0])
+
+    new_prod_path = None
+    if orig_img and os.path.exists(orig_img):
+        ext = Path(orig_img).suffix or ".jpg"
+        dest_prod = PROJECTS_DIR / new_project_id / "product" / f"product_original{ext}"
+        shutil.copyfile(orig_img, str(dest_prod))
+        new_prod_path = str(dest_prod)
+
+    # Compose new warehouse presenter image
+    char_dest = PROJECTS_DIR / new_project_id / "character" / "character_primary.png"
+    new_char_path = None
+    if new_prod_path and os.path.exists(new_prod_path):
+        try:
+            from backend.app.services.character_composer import compose_studio_character_with_product
+            await asyncio.to_thread(compose_studio_character_with_product, new_prod_path, str(char_dest))
+            if char_dest.exists():
+                new_char_path = str(char_dest)
+        except Exception as e_comp:
+            _log.warning(f"Error composing character for clone: {e_comp}")
+
+    # Build warehouse script (≥ 42 words, warehouse setting & factory-direct pricing)
+    from backend.app.services.pipeline_runner import build_fallback_scripts
+    wh_scripts = build_fallback_scripts(
+        product_name=new_name,
+        category=orig_dict.get("category") or "Thương mại & Bán lẻ",
+        benefits=orig_dict.get("benefits") or "",
+        highlights=orig_dict.get("highlights") or "",
+        offer=orig_dict.get("offer") or "Tặng kèm ưu đãi trợ giá xuất xưởng và miễn phí giao hàng",
+        price=orig_dict.get("price") or "Giá xuất xưởng siêu ưu đãi",
+        is_warehouse_mode=True
+    )
+
+    p_cat = orig_dict.get("category") or "Thương mại & Bán lẻ"
+    p_ben = orig_dict.get("benefits") or ""
+    p_high = orig_dict.get("highlights") or ""
+    p_price = orig_dict.get("price") or "Giá xuất xưởng siêu ưu đãi"
+    p_offer = orig_dict.get("offer") or "Tặng kèm ưu đãi trợ giá xuất xưởng và miễn phí giao hàng"
+
+    await db.execute("""
+        INSERT INTO projects (
+            id, name, category, description, benefits, highlights, price, offer,
+            original_image_path, primary_character_image_path,
+            status, automation_mode, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'character_created', 'auto', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    """, (
+        new_project_id, new_name, p_cat, orig_dict.get("description") or new_name,
+        p_ben, p_high, p_price, p_offer, new_prod_path, new_char_path
+    ))
+
+    # Assets
+    if new_prod_path and os.path.exists(new_prod_path):
+        a1_id = str(uuid.uuid4())[:8]
+        await db.execute("""
+            INSERT INTO assets (id, project_id, asset_type, file_path, file_name, file_size, is_primary)
+            VALUES (?, ?, 'original_product', ?, ?, ?, 1)
+        """, (a1_id, new_project_id, new_prod_path, Path(new_prod_path).name, os.path.getsize(new_prod_path)))
+
+    if new_char_path and os.path.exists(new_char_path):
+        a2_id = str(uuid.uuid4())[:8]
+        await db.execute("""
+            INSERT INTO assets (id, project_id, asset_type, file_path, file_name, file_size, is_primary)
+            VALUES (?, ?, 'ai_character', ?, ?, ?, 1)
+        """, (a2_id, new_project_id, new_char_path, Path(new_char_path).name, os.path.getsize(new_char_path)))
+
+    # Scripts
+    chosen_s_id = None
+    for s in wh_scripts:
+        s_id = str(uuid.uuid4())[:8]
+        if not chosen_s_id:
+            chosen_s_id = s_id
+        await db.execute("""
+            INSERT INTO scripts (
+                id, project_id, option_label, option_title, hook_concept,
+                scene1_dialogue, scene1_word_count, scene1_prompt_veo,
+                scene2_dialogue, scene2_word_count, scene2_prompt_veo,
+                is_selected, raw_response
+            ) VALUES (?, ?, 'A', ?, ?, ?, ?, ?, ?, ?, ?, 1, 'Warehouse variant script')
+        """, (
+            s_id, new_project_id, s["title"], s["hook"],
+            s["scene1_dialogue"], s["scene1_words"], s["scene1_prompt_veo"],
+            s["scene2_dialogue"], s["scene2_words"], s["scene2_prompt_veo"]
+        ))
+
+    if chosen_s_id:
+        await db.execute("UPDATE projects SET selected_script_id = ? WHERE id = ?", (chosen_s_id, new_project_id))
+
+    await db.commit()
+
+    if auto_run:
+        pipeline_runner.enqueue_batch([new_project_id], auto_run=True, force_regenerate=True, prioritize=True)
+
+    return {
+        "success": True,
+        "project_id": new_project_id,
+        "name": new_name,
+        "message": f"Đã nhân bản video '{new_name}' (Bối cảnh tổng kho xưởng, giá rẻ tận gốc) thành công!"
+    }
+
+
+
 
 

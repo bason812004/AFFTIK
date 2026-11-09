@@ -24,7 +24,8 @@ import {
   Combine,
   Image as ImageIcon,
   Wand2,
-  Trash2
+  Trash2,
+  Layers
 } from 'lucide-react';
 import { ScriptOption, Asset, QualityCheckResult, AutomationMode } from '../types';
 import { api } from '../api';
@@ -137,6 +138,7 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
   // 1-Click Full Automation state
   const [pipelineTask, setPipelineTask] = useState<any>(null);
   const [runningFullAuto, setRunningFullAuto] = useState<boolean>(false);
+  const [cloningVariant, setCloningVariant] = useState<boolean>(false);
   const [queueToast, setQueueToast] = useState<{ message: string; projectId?: string } | null>(null);
 
   const effectiveId = projectId || project?.id || 'manual01';
@@ -360,6 +362,25 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
     } catch (e: any) {
       alert('Lỗi kích hoạt tự động: ' + e.message);
       setRunningFullAuto(false);
+    }
+  };
+
+  const handleCloneVideoVariant = async () => {
+    if (!effectiveId) return;
+    try {
+      setCloningVariant(true);
+      const res = await api.cloneVideoVariant(effectiveId, true);
+      if (res?.project_id) {
+        if (onProjectCreated) {
+          onProjectCreated(res.project_id);
+        } else {
+          await loadProject(false, res.project_id);
+        }
+      }
+    } catch (e: any) {
+      alert('Lỗi nhân bản video kho xưởng: ' + (e?.message || e));
+    } finally {
+      setCloningVariant(false);
     }
   };
 
@@ -1395,6 +1416,25 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
               <span>{runningFullAuto ? 'Đang Tự Động Chạy...' : '🚀 BẮT ĐẦU TỰ ĐỘNG TOÀN BỘ'}</span>
             </button>
           )}
+
+          <button
+            onClick={handleCloneVideoVariant}
+            disabled={cloningVariant || !project?.original_image_path}
+            title="Nhân bản video: Giữ sản phẩm, tạo nhân vật mới ở bối cảnh tổng kho xưởng, thoại giá xưởng rẻ nhất ≥ 42 từ và tự động tạo tiếp video 20s mới"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white text-xs font-black shadow-lg shadow-amber-500/25 flex items-center gap-2 transition-all transform hover:-translate-y-0.5 disabled:opacity-40"
+          >
+            {cloningVariant ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Đang Nhân Bản...</span>
+              </>
+            ) : (
+              <>
+                <Layers className="w-4 h-4" />
+                <span>✨ Nhân Bản Video SP (Bản Kho Xưởng)</span>
+              </>
+            )}
+          </button>
 
           {/* Smart Video Engine Pill: Works if EITHER Muse AI OR Flow is logged in */}
           {museStatus?.logged_in && !flowStatus?.logged_in ? (
@@ -4219,6 +4259,42 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
                     className="w-full h-full object-cover"
                   />
                 </div>
+              </div>
+
+              {/* Callout: Clone Warehouse Video Variant */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-rose-500/15 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/25 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-white flex items-center gap-2">
+                      <span>Nhân Bản Thêm Video Mới Cho Sản Phẩm Này?</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-extrabold">BẢN KHO XƯỞNG GIÁ RẺ</span>
+                    </h5>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Đổi ngay nhân vật AI mới, bối cảnh <strong>Tổng Kho Xưởng Hàng Rẻ Tận Gốc</strong>, kịch bản ≥ 42 từ chuẩn 10s và tự động tạo 2 cảnh mới!
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloneVideoVariant}
+                  disabled={cloningVariant}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white text-xs font-black shadow-lg shadow-amber-500/25 flex items-center gap-2 transition-all shrink-0 disabled:opacity-50"
+                >
+                  {cloningVariant ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang nhân bản...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Layers className="w-4 h-4" />
+                      <span>✨ Nhân Bản Video Mới (Bản Kho Xưởng)</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}

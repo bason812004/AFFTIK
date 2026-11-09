@@ -15,7 +15,8 @@ import {
   Pause,
   Upload,
   ClipboardPaste,
-  RotateCcw
+  RotateCcw,
+  Layers
 } from 'lucide-react';
 import { Project } from '../types';
 import { api } from '../api';
@@ -159,6 +160,23 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
       await loadProjects(true);
     } catch (err: any) {
       alert('Lỗi tiếp tục hàng đợi: ' + (err.message || err));
+    } finally {
+      setBusyActionId(null);
+    }
+  };
+
+  const handleCloneVariant = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      setBusyActionId(id);
+      const res = await api.cloneVideoVariant(id, true);
+      if (res?.project_id) {
+        showTempNotice(res.message || '✨ Đã nhân bản video kho xưởng mới và tự động đưa vào hàng chạy!');
+        await loadProjects(true);
+        onOpenProject(res.project_id);
+      }
+    } catch (err: any) {
+      alert('Lỗi nhân bản video: ' + (err.message || err));
     } finally {
       setBusyActionId(null);
     }
@@ -443,6 +461,17 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
             >
               {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
               <span>Chạy lại</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => handleCloneVariant(e, p.id)}
+              disabled={isBusy}
+              title="Nhân bản video: Giữ sản phẩm, tạo nhân vật mới ở bối cảnh tổng kho xưởng giá rẻ và chạy tự động video mới"
+              className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center gap-1 transition-all"
+            >
+              {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+              <span>Nhân bản (Kho xưởng)</span>
             </button>
           </div>
 

@@ -128,20 +128,24 @@ def build_fallback_scripts(
     offer: str = "Ưu đãi trợ giá đặc biệt và miễn phí giao hàng hôm nay",
     price: str = "Ưu đãi hôm nay",
     custom_scene1_dialogue: str = "",
-    custom_scene2_dialogue: str = ""
+    custom_scene2_dialogue: str = "",
+    is_warehouse_mode: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Generates 1 concise, accurate, non-rambling affiliate script with 2 scenes (10s each = 20s total),
     each scene having at least 42 Vietnamese words (>= 42 words) and a 100% complete sentence
     that can be spoken in full within 10 seconds.
+    Supports warehouse / factory-direct pricing variant (is_warehouse_mode=True).
     """
     clean_pname = (product_name or "").strip()
     if not clean_pname or "cần nhập tên" in clean_pname.lower():
         clean_pname = "Sản phẩm chính hãng tiện ích"
 
+    is_wh = is_warehouse_mode or "kho xưởng" in clean_pname.lower() or "bản kho xưởng" in clean_pname.lower()
+
     scene1_action = ""
     scene2_action = ""
-    store_context = "cửa hàng trưng bày chuyên nghiệp"
+    store_context = f"tổng kho xưởng xuất nhập hàng {category.lower()} quy mô lớn với các dãy kệ pallet hiện đại" if is_wh else "cửa hàng trưng bày chuyên nghiệp"
     # Enrich from smart product profile / OCR rule parser so prompts are 100% specific and never rambling
     if "cần nhập tên" not in clean_pname.lower():
         try:
@@ -160,7 +164,8 @@ def build_fallback_scripts(
                     custom_scene2_dialogue = smart_prof.get("scene2_dialogue") or ""
                 scene1_action = smart_prof.get("scene1_action") or ""
                 scene2_action = smart_prof.get("scene2_action") or ""
-                store_context = smart_prof.get("store_context") or f"showroom {category.lower()}"
+                if not is_wh:
+                    store_context = smart_prof.get("store_context") or f"showroom {category.lower()}"
         except Exception:
             pass
 
@@ -179,28 +184,46 @@ def build_fallback_scripts(
         if len(parts) > 1:
             h_clause = _clean_clause(parts[1], max_words=28, fallback=h_clause)
 
-    # At least 42 Vietnamese words (>= 42 words) and complete sentence for Scene 1 (10s)
-    if custom_scene1_dialogue and len(custom_scene1_dialogue.strip().split()) >= 20:
-        s1 = ensure_42_words(
-            custom_scene1_dialogue.strip(),
-            filler="cho cả gia đình mình yên tâm sử dụng tiện lợi mỗi ngày nhé"
-        )
-    else:
-        raw_s1 = f"Cả nhà đang tìm {clean_pname} chuẩn chất lượng? Sản phẩm giúp {b_clause}!"
-        s1 = ensure_42_words(raw_s1, filler="cho cả gia đình mình yên tâm sử dụng tiện lợi mỗi ngày nhé")
+    if is_wh:
+        scene1_action = f"Nhân vật tươi cười hào sảng, đứng tại lối đi tổng kho xưởng với các dãy kệ hàng cao tầng phía sau, tay chỉ vào lô hàng {clean_pname} trên bàn kiểm hàng giới thiệu nguồn hàng giá xuất xưởng rẻ tận gốc"
+        scene2_action = f"Máy quay tiến chậm cận cảnh chi tiết cấu tạo chất liệu chuẩn xưởng của {clean_pname} ({h_clause}), nhân vật mỉm cười giơ ngón tay cái rồi chỉ xuống góc trái màn hình kêu gọi chốt đơn nhận giá xưởng"
 
-    # At least 42 Vietnamese words (>= 42 words) and complete sentence for Scene 2 (10s)
-    if custom_scene2_dialogue and len(custom_scene2_dialogue.strip().split()) >= 20:
-        s2 = ensure_42_words(
-            custom_scene2_dialogue.strip(),
-            filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi hôm nay nhé"
+        raw_s1 = (
+            f"Chào cả nhà, hôm nay em quay trực tiếp tại tổng kho xưởng xuất nhập hàng chính hãng. "
+            f"Toàn bộ lô {clean_pname} này xuất thẳng từ xưởng tận gốc không qua trung gian, nên bao giá rẻ sập sàn tận gốc luôn các bác ơi. "
+            f"Vừa chuẩn chất lượng lại giúp {b_clause}, cực kỳ hời cho cả nhà mình nhé!"
         )
-    else:
+        s1 = ensure_42_words(raw_s1, filler="cho các bác yên tâm đặt mua nguồn hàng chuẩn xưởng hôm nay nhé")
+
         raw_s2 = (
-            f"Đặc biệt {clean_pname} sở hữu {h_clause}. "
-            f"Hôm nay shop đang trợ giá ưu đãi kèm giao hàng nhanh, cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!"
+            f"Cận cảnh từng chi tiết {clean_pname} cấu tạo chuẩn xưởng {h_clause}. "
+            f"Số lượng xả kho có hạn, hôm nay shop bao giá xuất xưởng rẻ nhất thị trường kèm quà tặng và miễn phí giao hàng tận nhà. "
+            f"Cả nhà bấm ngay vào giỏ hàng góc trái màn hình để chốt đơn nhận giá xưởng ngay hôm nay nhé!"
         )
-        s2 = ensure_42_words(raw_s2, filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi hôm nay nhé")
+        s2 = ensure_42_words(raw_s2, filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi giá xưởng nhé")
+    else:
+        # At least 42 Vietnamese words (>= 42 words) and complete sentence for Scene 1 (10s)
+        if custom_scene1_dialogue and len(custom_scene1_dialogue.strip().split()) >= 20:
+            s1 = ensure_42_words(
+                custom_scene1_dialogue.strip(),
+                filler="cho cả gia đình mình yên tâm sử dụng tiện lợi mỗi ngày nhé"
+            )
+        else:
+            raw_s1 = f"Cả nhà đang tìm {clean_pname} chuẩn chất lượng? Sản phẩm giúp {b_clause}!"
+            s1 = ensure_42_words(raw_s1, filler="cho cả gia đình mình yên tâm sử dụng tiện lợi mỗi ngày nhé")
+
+        # At least 42 Vietnamese words (>= 42 words) and complete sentence for Scene 2 (10s)
+        if custom_scene2_dialogue and len(custom_scene2_dialogue.strip().split()) >= 20:
+            s2 = ensure_42_words(
+                custom_scene2_dialogue.strip(),
+                filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi hôm nay nhé"
+            )
+        else:
+            raw_s2 = (
+                f"Đặc biệt {clean_pname} sở hữu {h_clause}. "
+                f"Hôm nay shop đang trợ giá ưu đãi kèm giao hàng nhanh, cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!"
+            )
+            s2 = ensure_42_words(raw_s2, filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi hôm nay nhé")
 
     s1_w = len(s1.split())
     s2_w = len(s2.split())

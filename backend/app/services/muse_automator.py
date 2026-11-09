@@ -120,8 +120,8 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
 def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: int) -> bool:
     """
     Guarantees zero cross-contamination and zero internal duplicates:
-    1. Checks if video_file has identical byte size to the companion scene of this project.
-    2. Checks if video_file has identical byte size to ANY scene video of any other project.
+    1. Checks if video_file has identical byte size / content to the companion scene of this project.
+    2. Checks if video_file has identical byte size / content to ANY scene video of any other project.
     Returns True if contaminated or duplicate.
     """
     if not video_file.exists():
@@ -130,20 +130,37 @@ def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: 
     if size < 20000:
         return True
     
+    import hashlib
+    def sample_hash(f: Path) -> str:
+        h = hashlib.md5()
+        with open(f, "rb") as fp:
+            h.update(fp.read(65536))
+            sz = f.stat().st_size
+            if sz > 131072:
+                fp.seek(sz - 65536)
+                h.update(fp.read(65536))
+        return h.hexdigest()
+
     # 1. Check other scene of same project
     other_scene = 2 if scene_num == 1 else 1
     other_file = video_file.parent / f"scene{other_scene}.mp4"
-    if other_file.exists() and other_file.stat().st_size == size:
-        logger.warning(f"File {video_file} has identical size ({size}B) to companion scene {other_file}! Rejecting as internal duplicate.")
-        return True
+    if other_file.exists():
+        other_sz = other_file.stat().st_size
+        if abs(other_sz - size) < 5000:
+            if sample_hash(video_file) == sample_hash(other_file):
+                logger.warning(f"File {video_file} matches identical content to companion scene {other_file}! Rejecting as internal duplicate.")
+                return True
         
     # 2. Check other projects
     for pdir in PROJECTS_DIR.iterdir():
         if pdir.is_dir() and pdir.name != project_id:
             for other_v in (pdir / "videos").glob("scene*.mp4"):
-                if other_v.exists() and other_v.stat().st_size == size:
-                    logger.warning(f"Cross-contamination detected: {video_file} matches exact size ({size}B) of {other_v}! Rejecting contaminated file.")
-                    return True
+                if other_v.exists():
+                    other_sz = other_v.stat().st_size
+                    if abs(other_sz - size) < 5000:
+                        if sample_hash(video_file) == sample_hash(other_v):
+                            logger.warning(f"Cross-contamination detected: {video_file} matches content of {other_v}! Rejecting contaminated file.")
+                            return True
     return False
 
 class MuseAutomator:
@@ -200,16 +217,24 @@ class MuseAutomator:
     ) -> Dict[str, Any]:
         """
         Scans messages in Muse AI chat strictly for videos matching project_name.
-        Groups chat messages by interaction turn (turnId), verifies product signatures
-        across the whole turn, and extracts distinct Scene 1 and Scene 2 videos while
-        mathematically filtering out avatar videos and cross-project contamination.
+        Extracts distinct Scene 1 and Scene 2 videos while mathematically filtering out
+        avatar videos, duplicate videos, and cross-project contamination.
         """
         target_slug = _slugify(project_name)
         pos_sigs = _get_distinctive_phrases(project_name)
         neg_sigs = _get_excluded_signatures(project_name)
 
         try:
-            await page.wait_for_selector('[data-message-item="true"], [data-message-role]', timeout=15000)
+            await page.wait_for_selector('[data-message-item="true"], [data-message-role]', timeout=8000)
+            # Auto-click unread messages button and scroll scrollers to bottom to hydrate virtual DOM
+            await page.evaluate("""() => {
+                const btns = Array.from(document.querySelectorAll('button'));
+                const unread = btns.find(b => (b.innerText || '').includes('tin nhắn'));
+                if (unread) { try { unread.click(); } catch (e) {} }
+                const scrollers = Array.from(document.querySelectorAll('*')).filter(e => e.scrollHeight > e.clientHeight + 50 && e.clientHeight > 200);
+                for (const s of scrollers) s.scrollTop = s.scrollHeight;
+                window.scrollTo(0, document.body.scrollHeight);
+            }""")
             await asyncio.sleep(1)
         except Exception:
             pass
@@ -230,7 +255,6 @@ class MuseAutomator:
             const normPosSigs = Array.from(new Set(posSigs.map(normalize).filter(s => s.length >= 3)));
             const normNegSigs = Array.from(new Set(negSigs.map(normalize).filter(s => s.length >= 3)));
 
-            // Helper to check if an element is an avatar video
             function isAvatar(el) {
                 if (!el) return true;
                 if (el.closest('[class*="status-avatar"], [class*="rounded-full"], div[class*="avatar"]')) return true;
@@ -238,18 +262,25 @@ class MuseAutomator:
                 if (v) {
                     if (v.videoWidth > 0 && v.videoWidth === v.videoHeight) return true;
                     if (v.duration > 0 && v.duration < 5.5) return true;
-                    const vCls = v.className || '';
+                    const vCls = String(v.className || '');
                     if (vCls.includes('rounded-full') || vCls.includes('avatar')) return true;
                 }
                 return false;
             }
 
-            // Find all message containers
             const items = Array.from(document.querySelectorAll('[data-message-item="true"], [data-message-role]'));
             results.msgCount = items.length;
             if (!items.length) return results;
 
-            // Group items into turns by data-message-turn-id or consecutive assistant blocks
+            // Scroll potential unhydrated video cards into view to trigger client-side mounting
+            for (let i = items.length - 1; i >= Math.max(0, items.length - 20); i--) {
+                const it = items[i];
+                if (it.querySelector('[role="status"], [data-slot="skeleton"], video, [data-hatch-video-wrapper]')) {
+                    try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
+                }
+            }
+
+            // Group items into turns by data-message-turn-id
             const turns = [];
             let currentTurnId = null;
             let currentTurn = [];
@@ -273,25 +304,21 @@ class MuseAutomator:
                 const turnTextRaw = turn.items.map(it => it.innerText || '').join(' ').toLowerCase();
                 const turnTextNorm = normalize(turnTextRaw);
 
-                // Check positive match
-                const hasPos = normPosSigs.some(sig => turnTextNorm.includes(sig));
-                if (!hasPos) continue;
+                // Quick filter: turn must mention something related to the target product
+                const turnHasPos = normPosSigs.some(sig => turnTextNorm.includes(sig));
+                if (!turnHasPos) continue;
 
-                // Check if turn explicitly belongs to another product
-                const hasNeg = normNegSigs.some(sig => turnTextNorm.includes(sig));
-                if (hasNeg && !normPosSigs.some(sig => turnTextRaw.includes(sig))) continue;
-
-                try { turn.items[0].scrollIntoView({ block: 'center' }); } catch(e) {}
-
-                // Find all video presentation elements in this turn
+                // Find all video presentation elements in this turn with their local contextual captions
                 const turnVideos = [];
                 const seenTurnSrcs = new Set();
 
-                for (const it of turn.items) {
+                for (let idx = 0; idx < turn.items.length; idx++) {
+                    const it = turn.items[idx];
+                    try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
+
                     const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
                     for (const el of rawVideos) {
                         if (isAvatar(el)) continue;
-                        try { el.scrollIntoView({ block: 'center' }); } catch(e) {}
 
                         const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
                         let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
@@ -307,11 +334,33 @@ class MuseAutomator:
 
                         if (!seenTurnSrcs.has(src)) {
                             seenTurnSrcs.add(src);
-                            const prevText = (it.previousElementSibling ? it.previousElementSibling.innerText : '').toLowerCase();
+
+                            // Build local context text: immediate item text + previous 2 sibling texts
+                            let localText = (it.innerText || '');
+                            let pNode = it.previousElementSibling;
+                            let hops = 0;
+                            while (pNode && hops < 2) {
+                                localText = (pNode.innerText || '') + ' ' + localText;
+                                if (pNode.querySelector('video, [data-hatch-video-wrapper]')) break;
+                                pNode = pNode.previousElementSibling;
+                                hops++;
+                            }
+                            const normLocal = normalize(localText);
+
+                            // Strict cross-product anti-contamination:
+                            // Check if this specific video's local caption explicitly names another product!
+                            const hasOtherProduct = normNegSigs.some(sig => normLocal.includes(sig));
+                            const hasThisProduct = normPosSigs.some(sig => normLocal.includes(sig));
+
+                            // If this video explicitly belongs to another product and does NOT have strong pos, reject it!
+                            if (hasOtherProduct && !hasThisProduct) {
+                                continue;
+                            }
+
                             turnVideos.push({
                                 element: el,
                                 src,
-                                textBefore: prevText,
+                                localText: normLocal,
                                 aria: el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || ''
                             });
                         }
@@ -320,25 +369,35 @@ class MuseAutomator:
 
                 if (!turnVideos.length) continue;
 
-                // Turn with 2 distinct videos -> exact scene 1 and scene 2 pairing!
-                if (turnVideos.length >= 2) {
-                    if (!results.scene1) results.scene1 = turnVideos[0];
-                    if (!results.scene2) results.scene2 = turnVideos[1];
-                    break;
-                } else if (turnVideos.length === 1) {
-                    const single = turnVideos[0];
-                    const singleNorm = normalize(single.textBefore + ' ' + single.aria);
-                    if (singleNorm.includes('canh 2') || singleNorm.includes('canh-2') || singleNorm.includes('canh2') || singleNorm.includes('chot don') || singleNorm.includes('can canh')) {
-                        if (!results.scene2) results.scene2 = single;
-                    } else {
-                        if (!results.scene1) results.scene1 = single;
+                // Inspect each video in this turn
+                for (let vIdx = 0; vIdx < turnVideos.length; vIdx++) {
+                    const tv = turnVideos[vIdx];
+                    const tText = tv.localText;
+
+                    const isExplicitS2 = tText.includes('canh 2') || tText.includes('canh-2') || tText.includes('canh2') || tText.includes('chot don') || tText.includes('can canh');
+                    const isExplicitS1 = tText.includes('canh 1') || tText.includes('canh-1') || tText.includes('canh1') || tText.includes('hook') || tText.includes('gioi thieu');
+
+                    if (isExplicitS2 && !results.scene2) {
+                        results.scene2 = { src: tv.src, aria: tv.aria };
+                    } else if (isExplicitS1 && !results.scene1) {
+                        results.scene1 = { src: tv.src, aria: tv.aria };
+                    } else if (turnVideos.length === 2) {
+                        // If 2 videos in same turn for this product: Video 0 is Scene 1, Video 1 is Scene 2
+                        if (vIdx === 0 && !results.scene1) {
+                            results.scene1 = { src: tv.src, aria: tv.aria };
+                        } else if (vIdx === 1 && !results.scene2) {
+                            results.scene2 = { src: tv.src, aria: tv.aria };
+                        }
+                    } else if (turnVideos.length === 1) {
+                        if (!results.scene1) results.scene1 = { src: tv.src, aria: tv.aria };
+                        else if (!results.scene2 && results.scene1.src !== tv.src) results.scene2 = { src: tv.src, aria: tv.aria };
                     }
                 }
 
                 if (results.scene1 && results.scene2) break;
             }
 
-            // Guarantee distinct sources
+            // Guarantee distinct sources: never allow Scene 1 and Scene 2 to have identical video URL!
             if (results.scene1 && results.scene2 && results.scene1.src === results.scene2.src) {
                 results.scene2 = null;
             }
@@ -603,7 +662,7 @@ class MuseAutomator:
                         if (v) {
                             if (v.videoWidth > 0 && v.videoWidth === v.videoHeight) return true;
                             if (v.duration > 0 && v.duration < 5.5) return true;
-                            const vCls = v.className || '';
+                            const vCls = String(v.className || '');
                             if (vCls.includes('rounded-full') || vCls.includes('avatar')) return true;
                         }
                         return false;
@@ -639,19 +698,18 @@ class MuseAutomator:
                         const hasPos = normPosSigs.some(sig => turnTextNorm.includes(sig));
                         if (!hasPos) continue;
 
-                        const hasNeg = normNegSigs.some(sig => turnTextNorm.includes(sig));
-                        if (hasNeg && !normPosSigs.some(sig => turnTextRaw.includes(sig))) continue;
-
                         try { turn.items[0].scrollIntoView({ block: 'center' }); } catch (e) {}
 
                         const turnVideos = [];
                         const seenTurnSrcs = new Set();
 
-                        for (const it of turn.items) {
+                        for (let idx = 0; idx < turn.items.length; idx++) {
+                            const it = turn.items[idx];
+                            try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
+
                             const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
                             for (const el of rawVideos) {
                                 if (isAvatar(el)) continue;
-                                try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
 
                                 const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
                                 let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
@@ -667,11 +725,26 @@ class MuseAutomator:
 
                                 if (!seenTurnSrcs.has(src)) {
                                     seenTurnSrcs.add(src);
-                                    const prevText = (it.previousElementSibling ? it.previousElementSibling.innerText : '').toLowerCase();
+                                    let localText = (it.innerText || '');
+                                    let pNode = it.previousElementSibling;
+                                    let hops = 0;
+                                    while (pNode && hops < 2) {
+                                        localText = (pNode.innerText || '') + ' ' + localText;
+                                        if (pNode.querySelector('video, [data-hatch-video-wrapper]')) break;
+                                        pNode = pNode.previousElementSibling;
+                                        hops++;
+                                    }
+                                    const normLocal = normalize(localText);
+
+                                    // Strict anti-contamination
+                                    const hasOther = normNegSigs.some(sig => normLocal.includes(sig));
+                                    const hasThis = normPosSigs.some(sig => normLocal.includes(sig));
+                                    if (hasOther && !hasThis) continue;
+
                                     turnVideos.push({
                                         src,
-                                        aria: el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || '',
-                                        textBefore: prevText
+                                        localText: normLocal,
+                                        aria: el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || ''
                                     });
                                 }
                             }
@@ -679,17 +752,24 @@ class MuseAutomator:
 
                         if (!turnVideos.length) continue;
 
-                        if (turnVideos.length >= 2) {
-                            const chosen = sceneNum === 1 ? turnVideos[0] : turnVideos[1];
-                            return { src: chosen.src, aria: chosen.aria, text: turnTextRaw.substring(0, 100) };
-                        } else if (turnVideos.length === 1) {
-                            const single = turnVideos[0];
-                            const singleNorm = normalize(single.textBefore + ' ' + single.aria);
-                            const isScene2 = singleNorm.includes('canh 2') || singleNorm.includes('canh-2') || singleNorm.includes('canh2') || singleNorm.includes('chot don') || singleNorm.includes('can canh');
-                            if (sceneNum === 2 && isScene2) {
-                                return { src: single.src, aria: single.aria, text: turnTextRaw.substring(0, 100) };
-                            } else if (sceneNum === 1 && !isScene2) {
-                                return { src: single.src, aria: single.aria, text: turnTextRaw.substring(0, 100) };
+                        for (let vIdx = 0; vIdx < turnVideos.length; vIdx++) {
+                            const tv = turnVideos[vIdx];
+                            const tText = tv.localText;
+
+                            const isS2 = tText.includes('canh 2') || tText.includes('canh-2') || tText.includes('canh2') || tText.includes('chot don') || tText.includes('can canh');
+                            const isS1 = tText.includes('canh 1') || tText.includes('canh-1') || tText.includes('canh1') || tText.includes('hook') || tText.includes('gioi thieu');
+
+                            if (sceneNum === 2 && isS2) {
+                                return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
+                            } else if (sceneNum === 1 && isS1) {
+                                return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
+                            } else if (turnVideos.length === 2) {
+                                if (sceneNum === 1 && vIdx === 0) return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
+                                if (sceneNum === 2 && vIdx === 1) return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
+                            } else if (turnVideos.length === 1 && !isS2 && sceneNum === 1) {
+                                return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
+                            } else if (turnVideos.length === 1 && isS2 && sceneNum === 2) {
+                                return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
                             }
                         }
                     }
@@ -796,11 +876,13 @@ class MuseAutomator:
                                 const turnVideos = [];
                                 const seenTurnSrcs = new Set();
 
-                                for (const it of turn.items) {
+                                for (let idx = 0; idx < turn.items.length; idx++) {
+                                    const it = turn.items[idx];
+                                    try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch (e) {}
+
                                     const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
                                     for (const el of rawVideos) {
                                         if (isAvatar(el)) continue;
-                                        try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
 
                                         const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
                                         let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
@@ -814,19 +896,38 @@ class MuseAutomator:
                                         }
                                         if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
 
-                                        if (!seenTurnSrcs.has(src)) {
+                                        if (!seenTurnSrcs.has(src) && src !== mainSrc) {
                                             seenTurnSrcs.add(src);
-                                            turnVideos.push({ src, aria: el.getAttribute('aria-label') || '' });
+                                            let localText = (it.innerText || '');
+                                            let pNode = it.previousElementSibling;
+                                            let hops = 0;
+                                            while (pNode && hops < 2) {
+                                                localText = (pNode.innerText || '') + ' ' + localText;
+                                                if (pNode.querySelector('video, [data-hatch-video-wrapper]')) break;
+                                                pNode = pNode.previousElementSibling;
+                                                hops++;
+                                            }
+                                            const normLocal = normalize(localText);
+                                            const hasOther = normNegSigs.some(sig => normLocal.includes(sig));
+                                            const hasThis = normPosSigs.some(sig => normLocal.includes(sig));
+                                            if (hasOther && !hasThis) continue;
+
+                                            turnVideos.push({ src, localText: normLocal, aria: el.getAttribute('aria-label') || '' });
                                         }
                                     }
                                 }
 
-                                if (turnVideos.length >= 2) {
-                                    const compIdx = otherScene === 1 ? 0 : 1;
-                                    const compV = turnVideos[compIdx];
-                                    if (compV && compV.src && compV.src !== mainSrc) {
-                                        return { src: compV.src, aria: compV.aria };
+                                if (turnVideos.length > 0) {
+                                    for (const tv of turnVideos) {
+                                        const tText = tv.localText;
+                                        const isExplicitOther = otherScene === 1 
+                                            ? (tText.includes('canh 1') || tText.includes('canh-1') || tText.includes('hook') || tText.includes('gioi thieu'))
+                                            : (tText.includes('canh 2') || tText.includes('canh-2') || tText.includes('chot don') || tText.includes('can canh'));
+                                        if (isExplicitOther || turnVideos.length === 1) {
+                                            return { src: tv.src, aria: tv.aria };
+                                        }
                                     }
+                                    return { src: turnVideos[0].src, aria: turnVideos[0].aria };
                                 }
                             }
                             return null;

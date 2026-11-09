@@ -180,6 +180,18 @@ export const api = {
     return handleResponse(res);
   },
 
+  async cloneVideoVariant(projectId: string, autoRun: boolean = true): Promise<{
+    success: boolean;
+    project_id: string;
+    name: string;
+    message: string;
+  }> {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/clone-video-variant?auto_run=${autoRun ? 'true' : 'false'}`, {
+      method: 'POST'
+    });
+    return handleResponse(res);
+  },
+
   async quickCreateFromClipboard(autoRun: boolean = true, name?: string): Promise<{ project_id: string; task_id?: string; success: boolean; name: string; category?: string; benefits?: string; message?: string }> {
     const query = new URLSearchParams();
     query.set('auto_run', autoRun ? 'true' : 'false');
