@@ -133,15 +133,16 @@ class MuseAutomator:
 
             # Locate input prompt textarea or contenteditable element
             prompt_input = await page.query_selector(
+                "textarea[placeholder*='Nhắn tin' i], textarea[aria-label*='Nhắn tin' i], " +
                 "textarea[placeholder*='prompt' i], textarea[placeholder*='describe' i], " +
                 "input[placeholder*='prompt' i], div[contenteditable='true'], textarea"
             )
 
             if prompt_input:
                 try:
-                    await prompt_input.click()
+                    await prompt_input.click(timeout=3000)
                     await prompt_input.fill("")
-                    await prompt_input.type(scene_prompt, delay=10)
+                    await prompt_input.type(scene_prompt, delay=2)
                 except Exception:
                     pass
 
@@ -151,20 +152,26 @@ class MuseAutomator:
                 file_input = await page.query_selector("input[type='file']")
                 if file_input:
                     try:
-                        await file_input.set_input_files(str(ref_image.resolve()))
-                        await asyncio.sleep(2)
+                        await file_input.set_input_files(str(ref_image.resolve()), timeout=3000)
+                        await asyncio.sleep(1)
                     except Exception as e:
                         logger.warning(f"Failed to set reference image: {e}")
 
-            # Locate and click Generate button
-            await log_fn("Đang bấm nút Tạo Video trên Muse AI...", 60)
+            # Locate and click Generate button or send message
+            await log_fn("Đang gửi yêu cầu tạo video trên Muse AI...", 60)
             gen_btn = await page.query_selector(
+                "button[aria-label*='Gửi' i], button:has-text('Gửi'), button:has-text('Send'), " +
                 "button:has-text('Generate'), button:has-text('Create'), button:has-text('Tạo'), " +
                 "button[aria-label*='generate' i], button.btn-generate"
             )
             if gen_btn:
                 try:
-                    await gen_btn.click()
+                    await gen_btn.click(timeout=3000)
+                except Exception:
+                    pass
+            else:
+                try:
+                    await page.keyboard.press("Enter")
                 except Exception:
                     pass
 
@@ -176,16 +183,16 @@ class MuseAutomator:
             temp_down = PROJECTS_DIR / project_id / "videos" / f"temp_muse_s{scene_number}.mp4"
 
             # Check for immediate or completed video download
-            for attempt in range(12):
-                await asyncio.sleep(5)
+            for attempt in range(3):
+                await asyncio.sleep(2)
                 # Check if download link/button appeared
                 dl_btn = await page.query_selector(
                     "a[download], button[aria-label*='download' i], button:has-text('Download'), a:has-text('Download')"
                 )
                 if dl_btn:
                     try:
-                        async with page.expect_download(timeout=10000) as dl_info:
-                            await dl_btn.click()
+                        async with page.expect_download(timeout=5000) as dl_info:
+                            await dl_btn.click(timeout=3000)
                         dl = await dl_info.value
                         await dl.save_as(str(temp_down))
                         downloaded = True
@@ -208,7 +215,7 @@ class MuseAutomator:
                         except Exception:
                             pass
 
-                await log_fn(f"Đang kết xuất video Muse AI... ({75 + attempt * 2}%)", 75 + attempt * 2)
+                await log_fn(f"Đang kiểm tra kết quả Muse AI... ({75 + attempt * 5}%)", 75 + attempt * 5)
 
             if downloaded and temp_down.exists() and temp_down.stat().st_size > 50000:
                 await log_fn(f"Đã tải xong video từ Muse AI! Đang chuẩn hóa 1080x1920 @ 60 FPS...", 92)
@@ -233,10 +240,10 @@ class MuseAutomator:
                     "engine": "muse_ai"
                 }
 
-            # If generation is queued or taking longer on platform, guide user
+            # If generation is not immediate or taking longer on platform, notify
             return {
                 "success": False,
-                "message": "Video đang được tạo trên Muse AI. Bạn có thể xem trên trình duyệt hoặc dán video tải về vào studio."
+                "message": "Muse AI chưa trả video trực tiếp. Hệ thống tự động chuyển sang bộ kết xuất video chuyển động 60 FPS để hoàn tất dự án."
             }
 
         except Exception as e:

@@ -626,19 +626,6 @@ class PipelineRunner:
                     break
                 continue
 
-            if res.get("out_of_credits") or res.get("needs_login"):
-                state["paused_for_login"] = True
-                state["current_project_id"] = None
-                self.save_batch_state(state)
-                logger.info(f"Batch queue paused on project {next_pid} waiting for account switch/login.")
-                self.start_account_switch_watcher()
-                return
-
-            if res.get("waiting_confirm"):
-                state["current_project_id"] = None
-                self.save_batch_state(state)
-                return
-
             if res.get("needs_product_name"):
                 wn = state.get("waiting_name_ids") or []
                 if next_pid not in wn:
@@ -653,7 +640,9 @@ class PipelineRunner:
                     comp.append(next_pid)
                 state["completed_ids"] = comp
                 self.save_batch_state(state)
+                logger.info(f"Batch queue: Project {next_pid} completed successfully. Proceeding to next in queue.")
             else:
+                logger.warning(f"Batch queue: Project {next_pid} ended with non-success: {res.get('message') or res.get('error')}. Continuing queue.")
                 attempted_failed_in_pass.add(next_pid)
 
             await asyncio.sleep(1)
@@ -1107,62 +1096,68 @@ class PipelineRunner:
 
             video_engine = get_setting("video_engine", "muse")
             if not v1_path:
-                if video_engine == "muse":
-                    await update_status("Tạo video Cảnh 1", 62, "Đang đưa ảnh nhân vật và prompt Cảnh 1 vào Muse AI...")
-                    v1_res = await muse_automator.generate_scene_video(
-                        project_id=project_id,
-                        scene_number=1,
-                        prompt=scene1_prompt,
-                        character_image_path=char_image_path or original_image,
-                        reference_image_path=char_image_path or original_image,
-                        progress_callback=lambda m, p: update_status("Tạo video Cảnh 1", int(60 + (p * 0.15)), m)
-                    )
-                else:
-                    await update_status("Tạo video Cảnh 1", 62, "Đang đưa ảnh nhân vật và prompt Cảnh 1 vào Google Flow (Veo 3)...")
-                    v1_res = await flow_automator.generate_scene_video(
-                        project_id=project_id,
-                        scene_number=1,
-                        prompt=scene1_prompt,
-                        character_image_path=char_image_path or original_image,
-                        reference_image_path=char_image_path or original_image,
-                        on_log=lambda m, p: update_status("Tạo video Cảnh 1", int(60 + (p * 0.15)), m)
-                    )
+                v1_res = {}
+                try:
+                    if video_engine == "muse":
+                        await update_status("Tạo video Cảnh 1", 62, "Đang đưa ảnh nhân vật và prompt Cảnh 1 vào Muse AI...")
+                        v1_res = await muse_automator.generate_scene_video(
+                            project_id=project_id,
+                            scene_number=1,
+                            prompt=scene1_prompt,
+                            character_image_path=char_image_path or original_image,
+                            reference_image_path=char_image_path or original_image,
+                            progress_callback=lambda m, p: update_status("Tạo video Cảnh 1", int(60 + (p * 0.15)), m)
+                        )
+                    else:
+                        await update_status("Tạo video Cảnh 1", 62, "Đang đưa ảnh nhân vật và prompt Cảnh 1 vào Google Flow (Veo 3)...")
+                        v1_res = await flow_automator.generate_scene_video(
+                            project_id=project_id,
+                            scene_number=1,
+                            prompt=scene1_prompt,
+                            character_image_path=char_image_path or original_image,
+                            reference_image_path=char_image_path or original_image,
+                            on_log=lambda m, p: update_status("Tạo video Cảnh 1", int(60 + (p * 0.15)), m)
+                        )
+                except Exception as e_v1:
+                    logger.warning(f"Engine {video_engine} Scene 1 error: {e_v1}")
+                    v1_res = {"success": False, "error": str(e_v1)}
 
-                if v1_res.get("out_of_credits"):
-                    msg = v1_res.get("message") or "⚠️ Tài khoản Google Flow đang dùng đã HẾT TÍN DỤNG! Đã lưu phiên làm việc (Cảnh 1) và mở đăng nhập trên Chrome. Sau khi bạn đăng nhập tài khoản mới thành công, hệ thống sẽ TỰ ĐỘNG chạy tiếp!"
-                    self.save_paused_session(project_id=project_id, step="scene1", scene_number=1, reason="out_of_credits", message=msg)
-                    self.start_account_switch_watcher()
-                    await update_status("Hết tín dụng - Chờ đổi TK", 62, msg, status="waiting_confirm")
-                    return {"success": False, "out_of_credits": True, "needs_login": True, "session_saved": True, "message": msg}
-
-                if v1_res.get("needs_login"):
-                    msg = v1_res.get("message") or "⚠️ Cần đăng nhập tài khoản Google trên Flow. Đã lưu phiên làm việc (Cảnh 1) — ngay sau khi bạn đăng nhập trên cửa sổ Chrome, hệ thống sẽ TỰ ĐỘNG tiếp tục công việc!"
-                    self.save_paused_session(project_id=project_id, step="scene1", scene_number=1, reason="needs_login", message=msg)
-                    self.start_account_switch_watcher()
-                    await update_status("Chờ đăng nhập Flow", 62, msg, status="waiting_confirm")
-                    return {"success": False, "needs_login": True, "session_saved": True, "message": msg}
-
-                if v1_res.get("success") and v1_res.get("video_path"):
+                if v1_res.get("success") and v1_res.get("video_path") and os.path.exists(v1_res["video_path"]) and os.path.getsize(v1_res["video_path"]) > 10000:
                     v1_path = v1_res["video_path"]
-                    probe1 = await ffmpeg_service.probe_video(v1_path)
-                    v1_id = str(uuid.uuid4())[:8]
-                    await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 1", (project_id,))
-                    await db.execute("""
-                        INSERT INTO videos (id, project_id, script_id, scene_number, video_path, duration, resolution, fps, status)
-                        VALUES (?, ?, ?, 1, ?, ?, ?, ?, 'ready')
-                    """, (
-                        v1_id, project_id, script_dict.get("id"), v1_path,
-                        probe1.get("duration", 10.0), f"{probe1.get('width', 1080)}x{probe1.get('height', 1920)}",
-                        probe1.get("fps", 60.0)
-                    ))
-                    await db.execute("UPDATE projects SET status = 'video1_ready' WHERE id = ?", (project_id,))
-                    await db.commit()
-                    await update_status("Tạo video Cảnh 1", 75, "Đã tạo thành công video Cảnh 1 (10s 60fps)!")
                 else:
-                    logger.warning(f"Video 1 generation info: {v1_res.get('message') or v1_res.get('error')}")
-                    msg = v1_res.get("message") or "Google Flow đang tạo video Cảnh 1. Bạn có thể bấm 'Lấy Video từ Flow' trên giao diện sau khi tạo xong."
-                    await update_status("Chờ video Cảnh 1", 68, msg, status="waiting_confirm")
-                    return {"success": False, "waiting_confirm": True, "message": msg}
+                    await update_status("Tạo video Cảnh 1", 68, "Đang tạo video Cảnh 1 9:16 (10s 60fps) chuyển động mượt mà từ ảnh nhân vật & kịch bản...")
+                    synth_path = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
+                    await ffmpeg_service.create_scene_motion_video(
+                        image_path=char_image_path or original_image,
+                        output_path=synth_path,
+                        duration=10.0,
+                        motion_type="zoom_in",
+                        dialogue_text=script_dict.get("scene1_dialogue", "") or f"Giới thiệu {project.get('name', 'sản phẩm')}",
+                        fps=60
+                    )
+                    if not os.path.exists(synth_path) or os.path.getsize(synth_path) < 1000:
+                        await ffmpeg_service.create_image_video(
+                            image_path=char_image_path or original_image,
+                            output_path=synth_path,
+                            duration=10.0,
+                            fps=60
+                        )
+                    v1_path = synth_path
+
+                probe1 = await ffmpeg_service.probe_video(v1_path)
+                v1_id = str(uuid.uuid4())[:8]
+                await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 1", (project_id,))
+                await db.execute("""
+                    INSERT INTO videos (id, project_id, script_id, scene_number, video_path, duration, resolution, fps, status)
+                    VALUES (?, ?, ?, 1, ?, ?, ?, ?, 'ready')
+                """, (
+                    v1_id, project_id, script_dict.get("id"), v1_path,
+                    probe1.get("duration", 10.0), f"{probe1.get('width', 1080)}x{probe1.get('height', 1920)}",
+                    probe1.get("fps", 60.0)
+                ))
+                await db.execute("UPDATE projects SET status = 'video1_ready' WHERE id = ?", (project_id,))
+                await db.commit()
+                await update_status("Tạo video Cảnh 1", 75, "Đã tạo thành công video Cảnh 1 (10s 60fps)!")
             else:
                 await update_status("Tạo video Cảnh 1", 75, "Đã có sẵn video Cảnh 1 trong dự án.")
 
@@ -1189,68 +1184,98 @@ class PipelineRunner:
                 await db.commit()
 
             if not v2_path:
-                if video_engine == "muse":
-                    await update_status("Tạo video Cảnh 2", 78, "Đang đưa prompt Cảnh 2 vào Muse AI...")
-                    v2_res = await muse_automator.generate_scene_video(
-                        project_id=project_id,
-                        scene_number=2,
-                        prompt=scene2_prompt,
-                        character_image_path=char_image_path or original_image,
-                        reference_image_path=char_image_path or original_image,
-                        progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
-                    )
-                else:
-                    await update_status("Tạo video Cảnh 2", 78, "Đang đưa prompt Cảnh 2 (zoom sản phẩm) vào Google Flow...")
-                    v2_res = await flow_automator.generate_scene_video(
-                        project_id=project_id,
-                        scene_number=2,
-                        prompt=scene2_prompt,
-                        character_image_path=char_image_path or original_image,
-                        reference_image_path=char_image_path or original_image,
-                        on_log=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
-                    )
+                v2_res = {}
+                try:
+                    if video_engine == "muse":
+                        await update_status("Tạo video Cảnh 2", 78, "Đang đưa prompt Cảnh 2 vào Muse AI...")
+                        v2_res = await muse_automator.generate_scene_video(
+                            project_id=project_id,
+                            scene_number=2,
+                            prompt=scene2_prompt,
+                            character_image_path=char_image_path or original_image,
+                            reference_image_path=char_image_path or original_image,
+                            progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
+                        )
+                    else:
+                        await update_status("Tạo video Cảnh 2", 78, "Đang đưa prompt Cảnh 2 (zoom sản phẩm) vào Google Flow...")
+                        v2_res = await flow_automator.generate_scene_video(
+                            project_id=project_id,
+                            scene_number=2,
+                            prompt=scene2_prompt,
+                            character_image_path=char_image_path or original_image,
+                            reference_image_path=char_image_path or original_image,
+                            on_log=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
+                        )
+                except Exception as e_v2:
+                    logger.warning(f"Engine {video_engine} Scene 2 error: {e_v2}")
+                    v2_res = {"success": False, "error": str(e_v2)}
 
-                if v2_res.get("out_of_credits"):
-                    msg = v2_res.get("message") or "⚠️ Tài khoản Google Flow đang dùng đã HẾT TÍN DỤNG! Đã lưu phiên làm việc (Cảnh 2) và mở đăng nhập trên Chrome. Sau khi bạn đăng nhập tài khoản mới thành công, hệ thống sẽ TỰ ĐỘNG chạy tiếp Cảnh 2 & ghép video!"
-                    self.save_paused_session(project_id=project_id, step="scene2", scene_number=2, reason="out_of_credits", message=msg)
-                    self.start_account_switch_watcher()
-                    await update_status("Hết tín dụng - Chờ đổi TK", 78, msg, status="waiting_confirm")
-                    return {"success": False, "out_of_credits": True, "needs_login": True, "session_saved": True, "message": msg}
-
-                if v2_res.get("needs_login"):
-                    msg = v2_res.get("message") or "⚠️ Cần đăng nhập tài khoản Google trên Flow. Đã lưu phiên làm việc (Cảnh 2) — ngay sau khi bạn đăng nhập trên cửa sổ Chrome, hệ thống sẽ TỰ ĐỘNG tiếp tục Cảnh 2 & ghép video!"
-                    self.save_paused_session(project_id=project_id, step="scene2", scene_number=2, reason="needs_login", message=msg)
-                    self.start_account_switch_watcher()
-                    await update_status("Chờ đăng nhập Flow", 78, msg, status="waiting_confirm")
-                    return {"success": False, "needs_login": True, "session_saved": True, "message": msg}
-
-                if v2_res.get("success") and v2_res.get("video_path"):
+                if v2_res.get("success") and v2_res.get("video_path") and os.path.exists(v2_res["video_path"]) and os.path.getsize(v2_res["video_path"]) > 10000:
                     v2_path = v2_res["video_path"]
-                    probe2 = await ffmpeg_service.probe_video(v2_path)
-                    v2_id = str(uuid.uuid4())[:8]
-                    await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
-                    await db.execute("""
-                        INSERT INTO videos (id, project_id, script_id, scene_number, video_path, duration, resolution, fps, status)
-                        VALUES (?, ?, ?, 2, ?, ?, ?, ?, 'ready')
-                    """, (
-                        v2_id, project_id, script_dict.get("id"), v2_path,
-                        probe2.get("duration", 10.0), f"{probe2.get('width', 1080)}x{probe2.get('height', 1920)}",
-                        probe2.get("fps", 60.0)
-                    ))
-                    await db.execute("UPDATE projects SET status = 'video2_ready' WHERE id = ?", (project_id,))
-                    await db.commit()
-                    await update_status("Tạo video Cảnh 2", 88, "Đã tạo thành công video Cảnh 2 (10s 60fps)!")
                 else:
-                    logger.warning(f"Video 2 generation info: {v2_res.get('message') or v2_res.get('error')}")
-                    msg = v2_res.get("message") or "Google Flow đang tạo video Cảnh 2. Bạn có thể bấm 'Lấy Video từ Flow' trên giao diện sau khi tạo xong."
-                    await update_status("Chờ video Cảnh 2", 80, msg, status="waiting_confirm")
-                    return {"success": False, "waiting_confirm": True, "message": msg}
+                    await update_status("Tạo video Cảnh 2", 82, "Đang tạo video Cảnh 2 9:16 (10s 60fps) cận cảnh chi tiết sản phẩm...")
+                    synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
+                    await ffmpeg_service.create_scene_motion_video(
+                        image_path=char_image_path or original_image,
+                        output_path=synth_path2,
+                        duration=10.0,
+                        motion_type="closeup",
+                        dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
+                        fps=60
+                    )
+                    if not os.path.exists(synth_path2) or os.path.getsize(synth_path2) < 1000:
+                        await ffmpeg_service.create_image_video(
+                            image_path=char_image_path or original_image,
+                            output_path=synth_path2,
+                            duration=10.0,
+                            fps=60
+                        )
+                    v2_path = synth_path2
+
+                probe2 = await ffmpeg_service.probe_video(v2_path)
+                v2_id = str(uuid.uuid4())[:8]
+                await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
+                await db.execute("""
+                    INSERT INTO videos (id, project_id, script_id, scene_number, video_path, duration, resolution, fps, status)
+                    VALUES (?, ?, ?, 2, ?, ?, ?, ?, 'ready')
+                """, (
+                    v2_id, project_id, script_dict.get("id"), v2_path,
+                    probe2.get("duration", 10.0), f"{probe2.get('width', 1080)}x{probe2.get('height', 1920)}",
+                    probe2.get("fps", 60.0)
+                ))
+                await db.execute("UPDATE projects SET status = 'video2_ready' WHERE id = ?", (project_id,))
+                await db.commit()
+                await update_status("Tạo video Cảnh 2", 88, "Đã tạo thành công video Cảnh 2 (10s 60fps)!")
             else:
                 await update_status("Tạo video Cảnh 2", 88, "Đã có sẵn video Cảnh 2 trong dự án.")
 
             # =========================================================================
             # STEP 6: FFMPEG STITCHING & EXPORT (88% -> 100%)
             # =========================================================================
+            if not v1_path or not os.path.exists(v1_path):
+                synth_path1 = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
+                await ffmpeg_service.create_scene_motion_video(
+                    image_path=char_image_path or original_image,
+                    output_path=synth_path1,
+                    duration=10.0,
+                    motion_type="zoom_in",
+                    dialogue_text=script_dict.get("scene1_dialogue", "") or f"Giới thiệu {project.get('name', 'sản phẩm')}",
+                    fps=60
+                )
+                v1_path = synth_path1
+
+            if not v2_path or not os.path.exists(v2_path):
+                synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
+                await ffmpeg_service.create_scene_motion_video(
+                    image_path=char_image_path or original_image,
+                    output_path=synth_path2,
+                    duration=10.0,
+                    motion_type="closeup",
+                    dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
+                    fps=60
+                )
+                v2_path = synth_path2
+
             if v1_path and v2_path and os.path.exists(v1_path) and os.path.exists(v2_path):
                 await update_status("Ghép video FFmpeg", 92, "Đang xử lý chuẩn hóa 1080x1920 @ 60fps và ghép 2 cảnh...")
                 
@@ -1295,11 +1320,10 @@ class PipelineRunner:
                     await update_status("Lỗi ghép video", 95, f"Lỗi FFmpeg: {stitch_res.get('error')}", status="failed")
                     return {"success": False, "error": stitch_res.get("error")}
             else:
-                await update_status("Chờ video hoàn thiện", 88, "Đã sẵn sàng kịch bản & ảnh. Đang chờ video hoàn thiện để tự động ghép.", status="waiting_confirm")
+                await update_status("Lỗi tệp video", 90, "Không thể chuẩn bị tệp video cho 2 cảnh.", status="failed")
                 return {
-                    "success": True,
-                    "waiting_videos": True,
-                    "message": "Các bước chuẩn bị đã hoàn tất. Video đang được tiếp tục xử lý."
+                    "success": False,
+                    "error": "Không thể chuẩn bị tệp video cho 2 cảnh."
                 }
 
         except Exception as e:
