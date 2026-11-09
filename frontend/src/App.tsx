@@ -120,6 +120,7 @@ export function App() {
               onOpenProject={handleOpenProject}
               geminiStatus={geminiStatus}
               flowStatus={flowStatus}
+              museStatus={museStatus}
               ffmpegStatus={ffmpegStatus}
             />
           )}
@@ -145,6 +146,7 @@ export function App() {
               onBack={() => setCurrentView('projects')}
               geminiStatus={geminiStatus}
               flowStatus={flowStatus}
+              museStatus={museStatus}
               ffmpegStatus={ffmpegStatus}
               onRefreshStatus={refreshStatuses}
               mode={mode}

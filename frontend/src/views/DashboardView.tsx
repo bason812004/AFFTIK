@@ -24,6 +24,7 @@ interface DashboardViewProps {
   onOpenProject: (projectId: string) => void;
   geminiStatus: any;
   flowStatus: any;
+  museStatus?: any;
   ffmpegStatus: any;
 }
 
@@ -32,6 +33,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenProject,
   geminiStatus,
   flowStatus,
+  museStatus,
   ffmpegStatus
 }) => {
   const [stats, setStats] = useState({
@@ -160,16 +162,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Film className="w-4 h-4 text-purple-400" />
             </div>
             <div>
-              <div className="text-xs font-semibold text-white">Google Flow (Veo 3)</div>
-              <div className="text-[11px] text-slate-400">Tạo video Cảnh 1 & Cảnh 2</div>
+              <div className="text-xs font-semibold text-white">Video AI (Muse / Flow)</div>
+              <div className="text-[11px] text-slate-400">Chỉ cần 1 trong 2 để tạo video</div>
             </div>
           </div>
           <span className={`text-[11px] px-2.5 py-1 rounded-full font-semibold border ${
-            flowStatus?.logged_in
+            (flowStatus?.logged_in || museStatus?.logged_in)
               ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
               : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
           }`}>
-            {flowStatus?.logged_in ? 'Đã kết nối' : 'Cần đăng nhập'}
+            {museStatus?.logged_in && flowStatus?.logged_in
+              ? 'Cả 2 đã sẵn sàng'
+              : museStatus?.logged_in
+                ? 'Muse AI: Đã kết nối'
+                : flowStatus?.logged_in
+                  ? 'Flow: Đã kết nối'
+                  : 'Cần đăng nhập 1 trong 2'}
           </span>
         </div>
 

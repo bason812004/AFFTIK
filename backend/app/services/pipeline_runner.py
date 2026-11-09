@@ -311,6 +311,30 @@ class PipelineRunner:
         except Exception:
             pass
 
+    def resolve_video_engine(self) -> str:
+        """
+        Resolves which video engine to use based on settings and login states.
+        Enables user to log into EITHER Muse AI OR Google Flow (or both).
+        """
+        configured = (get_setting("video_engine", "") or "").strip().lower()
+        muse_ok = get_setting("muse_logged_in") == "true"
+        flow_ok = get_setting("flow_logged_in") == "true"
+
+        if configured == "muse" and muse_ok:
+            return "muse"
+        if configured == "flow" and flow_ok:
+            return "flow"
+
+        # Auto-switch to whichever engine is logged in
+        if muse_ok and not flow_ok:
+            return "muse"
+        if flow_ok and not muse_ok:
+            return "flow"
+        if muse_ok and flow_ok:
+            return configured if configured in ("muse", "flow") else "muse"
+
+        return configured if configured in ("muse", "flow") else "muse"
+
     def get_batch_state(self) -> Dict[str, Any]:
         try:
             raw = get_setting("batch_queue_state", "")
@@ -673,7 +697,7 @@ class PipelineRunner:
             if time.time() - float(paused.get("paused_at", 0)) < 8.0:
                 continue
             try:
-                video_engine = get_setting("video_engine", "muse")
+                video_engine = self.resolve_video_engine()
                 if video_engine == "muse":
                     mpage = browser_manager.muse_page
                     if mpage and not mpage.is_closed():
@@ -1094,7 +1118,7 @@ class PipelineRunner:
                 await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 1", (project_id,))
                 await db.commit()
 
-            video_engine = get_setting("video_engine", "muse")
+            video_engine = self.resolve_video_engine()
             if not v1_path:
                 v1_res = {}
                 try:
