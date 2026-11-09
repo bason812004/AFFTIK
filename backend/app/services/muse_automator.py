@@ -365,7 +365,7 @@ class MuseAutomator:
             init_wrapper_count = initial_counts.get("wrapperCount", 0)
 
             # Input Prompt into Muse AI Chat
-            await log_fn(f"Đang nhập Prompt Cảnh {scene_number} cho '{pname}' vào Muse AI...", 40)
+            await log_fn(f"Đang chuẩn bị Prompt Cảnh {scene_number} cho '{pname}' vào Muse AI...", 40)
 
             prompt_input = await page.query_selector(
                 "textarea[placeholder*='Nhắn tin' i], textarea[aria-label*='Nhắn tin' i], " +
@@ -374,51 +374,71 @@ class MuseAutomator:
             )
 
             formatted_prompt = f"[Cảnh {scene_number} - {pname} | 9:16, 10s, 60fps] {scene_prompt}"
+            # Normalize whitespace/newlines to single line so Playwright doesn't prematurely trigger Enter
+            formatted_prompt = " ".join(formatted_prompt.split())
 
             if prompt_input:
                 try:
                     await prompt_input.click(timeout=3000)
                     await prompt_input.fill("")
-                    await prompt_input.type(formatted_prompt, delay=1)
-                except Exception:
-                    pass
+                    await prompt_input.fill(formatted_prompt)
+                    await asyncio.sleep(0.5)
+                except Exception as ex_type:
+                    logger.warning(f"Error typing prompt: {ex_type}")
 
             # Upload reference image if available
             if ref_image and ref_image.exists():
-                await log_fn(f"Đang đính kèm ảnh tham chiếu {pname}...", 50)
-                file_input = await page.query_selector("input[type='file']")
-                if file_input:
+                await log_fn(f"Đang đính kèm ảnh tham chiếu {pname}...", 48)
+                attached = False
+                attach_btn = await page.query_selector("button[aria-label='Đính kèm file']")
+                if attach_btn:
                     try:
-                        await file_input.set_input_files(str(ref_image.resolve()), timeout=3000)
-                        await asyncio.sleep(1)
-                    except Exception as e:
-                        logger.warning(f"Failed to set reference image: {e}")
+                        async with page.expect_file_chooser(timeout=5000) as fc_info:
+                            await attach_btn.click()
+                        file_chooser = await fc_info.value
+                        await file_chooser.set_files(str(ref_image.resolve()))
+                        attached = True
+                    except Exception as e_fc:
+                        logger.debug(f"File chooser event error: {e_fc}")
+
+                if not attached:
+                    file_input = await page.query_selector("input[type='file']")
+                    if file_input:
+                        try:
+                            await file_input.set_input_files(str(ref_image.resolve()), timeout=3000)
+                            attached = True
+                        except Exception as e:
+                            logger.warning(f"Failed to set reference image: {e}")
+
+                # Wait for attachment preview chip to confirm upload
+                for _ in range(15):
+                    has_chip = await page.query_selector("button[aria-label='Gỡ file đính kèm']")
+                    if has_chip:
+                        break
+                    await asyncio.sleep(0.4)
 
             # Send prompt
             await log_fn("Đang gửi yêu cầu tạo video trên Muse AI...", 55)
-            send_btn = await page.query_selector(
-                "button[aria-label*='Gửi' i], button:has-text('Gửi'), button:has-text('Send'), " +
-                "button:has-text('Generate'), button:has-text('Create'), button:has-text('Tạo'), " +
-                "button[aria-label*='generate' i]"
-            )
+            send_btn = await page.query_selector("button[aria-label='Gửi']")
             if send_btn:
                 try:
                     await send_btn.click(timeout=3000)
                 except Exception:
-                    await page.keyboard.press("Enter")
-            else:
-                await page.keyboard.press("Enter")
+                    if prompt_input:
+                        await prompt_input.press("Enter")
+            elif prompt_input:
+                await prompt_input.press("Enter")
 
             await asyncio.sleep(2)
 
-            # Step 3c: Wait for video generation (up to 120 seconds)
+            # Step 3c: Wait for video generation (up to 300 seconds)
             await log_fn(f"Đang chờ Muse AI kết xuất video Cảnh {scene_number} (chuẩn 9:16 60 FPS)...", 60)
 
             downloaded = False
-            for attempt in range(40):
+            for attempt in range(100):
                 await asyncio.sleep(3)
                 elapsed = (attempt + 1) * 3
-                current_pct = min(60 + int(attempt * 0.8), 92)
+                current_pct = min(60 + int(attempt * 0.35), 94)
 
                 # Keep bottom scrolled into view
                 await page.evaluate("""() => {
@@ -426,6 +446,17 @@ class MuseAutomator:
                     if (scroller) scroller.scrollTop = scroller.scrollHeight;
                     window.scrollTo(0, document.body.scrollHeight);
                 }""")
+
+                # Check if Muse is actively generating
+                is_muse_busy = await page.evaluate("""() => {
+                    const stopBtn = document.querySelector("button[aria-label='Dừng']");
+                    const runningEl = Array.from(document.querySelectorAll('*')).find(e => (e.innerText || '').includes('Đang chạy:') || (e.innerText || '').includes('Đang tạo video'));
+                    return Boolean(stopBtn || runningEl);
+                }""")
+                if is_muse_busy:
+                    await log_fn(f"Muse AI đang tạo video Cảnh {scene_number} cho '{pname}' ({elapsed}s)...", current_pct)
+                else:
+                    await log_fn(f"Muse AI đang dựng video Cảnh {scene_number} cho '{pname}' ({elapsed}s)...", current_pct)
 
                 # Look for newly generated video matching this scene and product
                 newest_video = await page.evaluate("""async (args) => {
@@ -592,7 +623,7 @@ class MuseAutomator:
 
             return {
                 "success": False,
-                "message": f"Muse AI chưa trả video trực tiếp sau 120s. Hệ thống tự động chuyển sang bộ kết xuất video chuyển động 60 FPS để hoàn tất dự án."
+                "message": f"Muse AI chưa kết xuất xong video trực tiếp sau 300s. Bạn có thể bấm 'Lấy Video từ Muse AI' trên giao diện sau khi Muse AI hoàn tất."
             }
 
         except Exception as e:

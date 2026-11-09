@@ -1154,6 +1154,20 @@ class PipelineRunner:
                 if v1_res.get("success") and v1_res.get("video_path") and os.path.exists(v1_res["video_path"]) and os.path.getsize(v1_res["video_path"]) > 10000:
                     v1_path = v1_res["video_path"]
                 else:
+                    if video_engine == "muse":
+                        # User explicitly selected Muse AI: DO NOT fallback to Google TTS over static picture!
+                        await update_status(
+                            "Chờ video Muse AI",
+                            68,
+                            f"Muse AI đang xử lý video Cảnh 1 cho '{project.get('name')}'. Bạn có thể bấm 'Lấy Video từ Muse AI' trên giao diện sau khi Muse hoàn tất!",
+                            status="waiting_confirm"
+                        )
+                        return {
+                            "success": False,
+                            "needs_manual_pull": True,
+                            "engine": "muse",
+                            "message": "Muse AI chưa trả video trực tiếp. Vui lòng bấm 'Lấy Video từ Muse AI' trên giao diện khi Muse hoàn tất!"
+                        }
                     await update_status("Tạo video Cảnh 1", 68, "Đang tạo video Cảnh 1 9:16 (10s 60fps) chuyển động mượt mà từ ảnh nhân vật & kịch bản...")
                     synth_path = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
                     await ffmpeg_service.create_scene_motion_video(
@@ -1247,6 +1261,20 @@ class PipelineRunner:
                 if v2_res.get("success") and v2_res.get("video_path") and os.path.exists(v2_res["video_path"]) and os.path.getsize(v2_res["video_path"]) > 10000:
                     v2_path = v2_res["video_path"]
                 else:
+                    if video_engine == "muse":
+                        # User explicitly selected Muse AI: DO NOT fallback to Google TTS over static picture!
+                        await update_status(
+                            "Chờ video Muse AI",
+                            82,
+                            f"Muse AI đang xử lý video Cảnh 2 cho '{project.get('name')}'. Bạn có thể bấm 'Lấy Video từ Muse AI' trên giao diện sau khi Muse hoàn tất!",
+                            status="waiting_confirm"
+                        )
+                        return {
+                            "success": False,
+                            "needs_manual_pull": True,
+                            "engine": "muse",
+                            "message": "Muse AI chưa trả video trực tiếp. Vui lòng bấm 'Lấy Video từ Muse AI' trên giao diện khi Muse hoàn tất!"
+                        }
                     await update_status("Tạo video Cảnh 2", 82, "Đang tạo video Cảnh 2 9:16 (10s 60fps) cận cảnh chi tiết sản phẩm...")
                     synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
                     await ffmpeg_service.create_scene_motion_video(
