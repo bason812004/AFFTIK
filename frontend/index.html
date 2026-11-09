@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TikTok Affiliate AI Studio PRO - Chuẩn 42 Từ 10s</title>
+    <script>
+      // Filter out noisy third-party browser extension errors (e.g. adblock360) from console
+      const _origError = console.error;
+      console.error = function (...args) {
+        const str = args.map(a => (typeof a === 'object' ? String(a?.message || JSON.stringify(a)) : String(a))).join(' ');
+        if (str.includes('adblock') || str.includes('filtering.adblock360.com') || str.includes('in-browser-notifications') || str.includes('installHook.js')) {
+          return;
+        }
+        _origError.apply(console, args);
+      };
+      window.addEventListener('unhandledrejection', function (e) {
+        const msg = String(e?.reason?.message || e?.reason || '');
+        if (msg.includes('adblock') || msg.includes('filtering.adblock360.com') || msg.includes('in-browser-notifications')) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

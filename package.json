@@ -1,0 +1,22 @@
+{
+  "name": "tiktok-affiliate-ai-studio-pro",
+  "version": "1.0.0",
+  "description": "Local automation studio for producing TikTok Affiliate videos with Gemini, Google Flow and FFmpeg",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "call venv\\Scripts\\activate.bat && python backend/run.py",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "tiktok",
+    "affiliate",
+    "automation",
+    "gemini",
+    "veo",
+    "ffmpeg",
+    "playwright"
+  ],
+  "author": "Antigravity Senior Full-Stack Engineer",
+  "license": "MIT"
+}
+
