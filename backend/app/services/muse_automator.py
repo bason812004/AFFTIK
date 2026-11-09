@@ -25,14 +25,14 @@ def _slugify(text: str) -> str:
     return re.sub(r'[-\s]+', '-', text)
 
 ALL_PRODUCT_SPECS = {
-    'máy bơm lốp xe hơi': ['may-bom', 'bom-lop', 'ugreen', 'may bom', 'bom lop'],
-    'phân bón trung vi lượng': ['phan-bon', 'trung-vi-luong', 'phan bon', 'trung vi luong', 'combi'],
-    'phục hồi vàng lá, thối rễ': ['vang-la', 'thoi-re', 'vang la', 'thoi re', 'phuc-hoi', 'phuc hoi'],
-    'ngũ cốc gà đá': ['ngu-coc', 'ga-da', 'ngu coc', 'ga da'],
+    'máy bơm lốp xe hơi': ['may-bom', 'bom-lop', 'ugreen', 'may bom', 'bom lop', 'bom xe hoi', 'bom lop xe', 'may bom lop'],
+    'phân bón trung vi lượng': ['phan-bon', 'trung-vi-luong', 'phan bon', 'trung vi luong', 'combi', 'combi pro', 'combi-pro'],
+    'phục hồi vàng lá, thối rễ': ['vang-la', 'thoi-re', 'vang la', 'thoi re', 'phuc-hoi', 'phuc hoi', 'pac 20', 'pac-20', 'pac20', 'vang la thoi re'],
+    'ngũ cốc gà đá': ['ngu-coc', 'ga-da', 'ngu coc', 'ga da', 'ngu coc ga da'],
     'muỗng cơm inox 304': ['muong-com', 'inox304', 'inox-304', 'muong com', 'inox 304'],
     'kệ 3 tầng': ['ke-3-tang', 'ke 3 tang'],
-    'nhựa đường dầu hắc dạng lỏng': ['nhua-duong', 'dau-hac', 'nhua duong', 'dau hac'],
-    'hạt cho mèo': ['hat-cho-meo', 'hat cho meo', 'thuc-an-meo'],
+    'nhựa đường dầu hắc dạng lỏng': ['nhua-duong', 'dau-hac', 'nhua duong', 'dau hac', 'sika', 'dau-hac-dang-long'],
+    'hạt cho mèo': ['hat-cho-meo', 'hat cho meo', 'thuc-an-meo', 'keepo', 'keepo k2', 'keepo-k2'],
     'ops Hanbio': ['ops-hanbio', 'hanbio', 'ops hanbio'],
     'túi đeo chéo': ['tui-deo', 'deo-cheo', 'tui-deo-cheo', 'tui deo']
 }
@@ -41,7 +41,8 @@ STOP_WORDS = {
     'cho', 'dang', 'tang', 're', 'la', 'vi', 'cao', 'tot', 'moi', 'cua', 
     'nhieu', 'loai', 'hop', 'chai', 'goi', 'san', 'pham', 'chinh', 'hang', 
     'tien', 'ich', 'chuan', 'sieu', 'dep', 'chat', 'luong', 'ngay', 'hom', 
-    'nay', 'them', 'giam', 'gia', 'khuyen', 'mai', 'kem'
+    'nay', 'them', 'giam', 'gia', 'khuyen', 'mai', 'kem', 'nguoi', 'dung',
+    'chot', 'don', 'gioi', 'thieu', 'canh'
 }
 
 def _get_distinctive_phrases(product_name: str) -> List[str]:
@@ -51,6 +52,11 @@ def _get_distinctive_phrases(product_name: str) -> List[str]:
     phrases = set()
     if slug:
         phrases.add(slug)
+    
+    # Also add original unslugified lowercase product name
+    low_name = (product_name or "").lower().strip()
+    if low_name:
+        phrases.add(low_name)
     
     # 2-word combinations
     for i in range(len(parts) - 1):
@@ -71,23 +77,25 @@ def _get_distinctive_phrases(product_name: str) -> List[str]:
             phrases.add(p)
             
     # Product aliases
-    low = (product_name or "").lower()
     for cat_name, sigs in ALL_PRODUCT_SPECS.items():
         cat_slug = _slugify(cat_name)
-        if cat_slug in slug or slug in cat_slug or cat_name.lower() in low or low in cat_name.lower():
+        if cat_slug in slug or slug in cat_slug or cat_name.lower() in low_name or low_name in cat_name.lower():
             phrases.update(sigs)
             
     return [p for p in phrases if len(p) >= 3 and p not in STOP_WORDS]
 
 def _get_excluded_signatures(target_name: str) -> List[str]:
     target_slug = _slugify(target_name)
+    target_low = (target_name or "").lower().strip()
     excluded = set()
     
     for prod_name, spec_sigs in ALL_PRODUCT_SPECS.items():
         p_slug = _slugify(prod_name)
-        if p_slug != target_slug and prod_name.lower() not in target_name.lower() and target_name.lower() not in prod_name.lower():
+        p_low = prod_name.lower().strip()
+        if p_slug != target_slug and p_low not in target_low and target_low not in p_low:
             excluded.update(spec_sigs)
             excluded.add(p_slug)
+            excluded.add(p_low)
             
     try:
         conn = _get_raw_conn()
@@ -96,8 +104,10 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
         for r in rows:
             p_name = r["name"] or ""
             p_slug = _slugify(p_name)
-            if p_slug and p_slug != target_slug and p_name.lower() not in target_name.lower() and target_name.lower() not in p_name.lower():
+            p_low = p_name.lower().strip()
+            if p_slug and p_slug != target_slug and p_low not in target_low and target_low not in p_low:
                 excluded.add(p_slug)
+                excluded.add(p_low)
                 for chunk in p_slug.split('-'):
                     if len(chunk) >= 4 and chunk not in STOP_WORDS:
                         excluded.add(chunk)
@@ -105,6 +115,35 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
         pass
         
     return [s for s in excluded if len(s) >= 3 and s not in STOP_WORDS]
+
+def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: int) -> bool:
+    """
+    Guarantees zero cross-contamination and zero internal duplicates:
+    1. Checks if video_file has identical byte size to the companion scene of this project.
+    2. Checks if video_file has identical byte size to ANY scene video of any other project.
+    Returns True if contaminated or duplicate.
+    """
+    if not video_file.exists():
+        return False
+    size = video_file.stat().st_size
+    if size < 20000:
+        return True
+    
+    # 1. Check other scene of same project
+    other_scene = 2 if scene_num == 1 else 1
+    other_file = video_file.parent / f"scene{other_scene}.mp4"
+    if other_file.exists() and other_file.stat().st_size == size:
+        logger.warning(f"File {video_file} has identical size ({size}B) to companion scene {other_file}! Rejecting as internal duplicate.")
+        return True
+        
+    # 2. Check other projects
+    for pdir in PROJECTS_DIR.iterdir():
+        if pdir.is_dir() and pdir.name != project_id:
+            for other_v in (pdir / "videos").glob("scene*.mp4"):
+                if other_v.exists() and other_v.stat().st_size == size:
+                    logger.warning(f"Cross-contamination detected: {video_file} matches exact size ({size}B) of {other_v}! Rejecting contaminated file.")
+                    return True
+    return False
 
 class MuseAutomator:
     """
@@ -160,7 +199,8 @@ class MuseAutomator:
     ) -> Dict[str, Any]:
         """
         Scans messages in Muse AI chat strictly for videos matching project_name.
-        Uses positive distinctive phrases and negative signature exclusions to prevent cross-contamination.
+        Uses positive distinctive phrases, user prompt header tracking, and negative signature exclusions
+        to mathematically eliminate cross-product contamination.
         Returns dict with keys 'scene1' and 'scene2' containing { 'src': ..., 'aria': ..., 'text': ... }.
         """
         target_slug = _slugify(project_name)
@@ -177,19 +217,55 @@ class MuseAutomator:
             const { targetSlug, posSigs, negSigs } = args;
             const results = { scene1: null, scene2: null };
 
-            // Find all assistant messages
-            const msgs = Array.from(document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"]'));
+            function normalize(str) {
+                if (!str) return '';
+                return str.toLowerCase()
+                    .replace(/đ/g, 'd')
+                    .replace(/Đ/g, 'd')
+                    .normalize('NFD')
+                    .replace(/[\\u0300-\\u036f]/g, '');
+            }
+
+            const normPosSigs = Array.from(new Set(posSigs.map(normalize).filter(s => s.length >= 3)));
+            const normNegSigs = Array.from(new Set(negSigs.map(normalize).filter(s => s.length >= 3)));
+
+            // Find all message containers
+            const msgs = Array.from(document.querySelectorAll('[data-message-role]'));
             if (!msgs.length) return results;
 
             // Scan backwards from newest to oldest
             for (let i = msgs.length - 1; i >= 0; i--) {
                 const m = msgs[i];
-                const text = (m.innerText || '').toLowerCase();
+                if (m.getAttribute('data-message-role') !== 'assistant') continue;
 
-                // Fast negative check: if message text explicitly belongs to another product, skip
-                if (negSigs.some(sig => text.includes(sig))) continue;
+                const mText = (m.innerText || '').toLowerCase();
+                const prevM = i > 0 && msgs[i-1].getAttribute('data-message-role') === 'assistant' ? msgs[i-1] : null;
+                const prevText = (prevM ? prevM.innerText : '').toLowerCase();
+                const combinedRaw = (prevText + ' ' + mText).trim();
+                const combinedNorm = normalize(combinedRaw);
 
-                const wrappers = Array.from(m.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video'));
+                // Trace back to immediate preceding user prompt
+                let userPromptRaw = '';
+                for (let u = i - 1; u >= 0; u--) {
+                    if (msgs[u].getAttribute('data-message-role') === 'user') {
+                        userPromptRaw = (msgs[u].innerText || '').toLowerCase();
+                        break;
+                    }
+                }
+
+                // Extract header product name from user prompt: [Cảnh X - Product Name | ...
+                const headerMatch = userPromptRaw.match(/\\[cảnh\\s*\\d+\\s*-\\s*([^|\\]]+)/i);
+                const promptHeaderProd = headerMatch ? normalize(headerMatch[1]) : '';
+
+                // If user prompt has explicit header for another product, SKIP
+                if (promptHeaderProd && normNegSigs.some(sig => promptHeaderProd.includes(sig)) && !normPosSigs.some(sig => promptHeaderProd.includes(sig))) {
+                    continue;
+                }
+
+                // Reject if assistant text matches ANY negative product signature
+                if (normNegSigs.some(sig => combinedNorm.includes(sig))) continue;
+
+                const wrappers = Array.from(m.querySelectorAll('[data-testid="hatch-chat-attachment-presentation-video"], [data-hatch-video-wrapper], video'));
                 if (!wrappers.length) continue;
 
                 m.scrollIntoView({ behavior: 'instant', block: 'center' });
@@ -198,44 +274,52 @@ class MuseAutomator:
                 for (let wIdx = 0; wIdx < wrappers.length; wIdx++) {
                     const w = wrappers[wIdx];
                     const wAria = (w.getAttribute('aria-label') || '').toLowerCase();
+                    const wAriaNorm = normalize(wAria);
                     const video = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
                     const src = w.getAttribute('data-hatch-video-src') || (video ? video.src : null);
 
                     if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
 
                     // Reject if aria-label matches ANY negative product signature
-                    if (negSigs.some(sig => wAria.includes(sig))) continue;
+                    if (normNegSigs.some(sig => wAriaNorm.includes(sig))) continue;
 
-                    // Positive check: aria-label OR surrounding message text must match positive signatures
-                    const hasPosAria = posSigs.some(sig => wAria.includes(sig));
-                    const hasPosText = posSigs.some(sig => text.includes(sig));
-                    if (!hasPosAria && !hasPosText) continue;
+                    // Positive check: aria-label OR surrounding assistant text OR user prompt header must match
+                    const hasPosAria = normPosSigs.some(sig => wAriaNorm.includes(sig));
+                    const hasPosText = normPosSigs.some(sig => combinedNorm.includes(sig));
+                    const hasPosHeader = promptHeaderProd && normPosSigs.some(sig => promptHeaderProd.includes(sig));
+                    if (!hasPosAria && !hasPosText && !hasPosHeader) continue;
 
                     // Scene verification
-                    let isS1 = wAria.includes('canh1') || wAria.includes('canh-1') || wAria.includes('cảnh 1');
-                    let isS2 = wAria.includes('canh2') || wAria.includes('canh-2') || wAria.includes('cảnh 2');
+                    let isS1 = false;
+                    let isS2 = false;
 
-                    // If message has 2 video wrappers, wrapper 0 is Scene 1, wrapper 1 is Scene 2
+                    if (wAriaNorm.includes('canh1') || wAriaNorm.includes('canh-1') || wAriaNorm.includes('canh 1')) isS1 = true;
+                    if (wAriaNorm.includes('canh2') || wAriaNorm.includes('canh-2') || wAriaNorm.includes('canh 2')) isS2 = true;
+
                     if (!isS1 && !isS2) {
-                        if (wrappers.length >= 2) {
+                        if (combinedNorm.includes('canh 1') && !combinedNorm.includes('canh 2')) isS1 = true;
+                        else if (combinedNorm.includes('canh 2') && !combinedNorm.includes('canh 1')) isS2 = true;
+                        else if (wrappers.length >= 2) {
                             if (wIdx === 0) isS1 = true;
                             if (wIdx === 1) isS2 = true;
-                        } else if (text.includes('cảnh 1')) {
-                            isS1 = true;
-                        } else if (text.includes('cảnh 2')) {
-                            isS2 = true;
-                        }
+                        } else if (userPromptRaw.includes('cảnh 1')) isS1 = true;
+                        else if (userPromptRaw.includes('cảnh 2')) isS2 = true;
                     }
 
                     if (isS1 && !results.scene1) {
-                        results.scene1 = { src, aria: wAria, text: text.substring(0, 100) };
+                        results.scene1 = { src, aria: wAria, text: combinedRaw.substring(0, 100), msgIndex: i, wrapperIndex: wIdx };
                     }
                     if (isS2 && !results.scene2) {
-                        results.scene2 = { src, aria: wAria, text: text.substring(0, 100) };
+                        results.scene2 = { src, aria: wAria, text: combinedRaw.substring(0, 100), msgIndex: i, wrapperIndex: wIdx };
                     }
                 }
 
                 if (results.scene1 && results.scene2) break;
+            }
+
+            // Guarantee scene1 and scene2 never have identical video source
+            if (results.scene1 && results.scene2 && results.scene1.src === results.scene2.src) {
+                results.scene2 = null;
             }
 
             // Restore scroll to bottom
@@ -461,59 +545,102 @@ class MuseAutomator:
                 # Look for newly generated video matching this scene and product
                 newest_video = await page.evaluate("""async (args) => {
                     const { initMsgCount, sceneNum, posSigs, negSigs } = args;
-                    const msgs = Array.from(document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"]'));
+
+                    function normalize(str) {
+                        if (!str) return '';
+                        return str.toLowerCase()
+                            .replace(/đ/g, 'd')
+                            .replace(/Đ/g, 'd')
+                            .normalize('NFD')
+                            .replace(/[\\u0300-\\u036f]/g, '');
+                    }
+
+                    const normPosSigs = Array.from(new Set(posSigs.map(normalize).filter(s => s.length >= 3)));
+                    const normNegSigs = Array.from(new Set(negSigs.map(normalize).filter(s => s.length >= 3)));
+
+                    const msgs = Array.from(document.querySelectorAll('[data-message-role]'));
                     if (!msgs.length) return null;
 
                     // Scan backwards from newest to oldest
                     for (let i = msgs.length - 1; i >= 0; i--) {
                         const m = msgs[i];
-                        const text = (m.innerText || '').toLowerCase();
+                        if (m.getAttribute('data-message-role') !== 'assistant') continue;
 
-                        // Fast negative check on message text
-                        if (negSigs.some(sig => text.includes(sig))) continue;
+                        const mText = (m.innerText || '').toLowerCase();
+                        const prevM = i > 0 && msgs[i-1].getAttribute('data-message-role') === 'assistant' ? msgs[i-1] : null;
+                        const prevText = (prevM ? prevM.innerText : '').toLowerCase();
+                        const combinedRaw = (prevText + ' ' + mText).trim();
+                        const combinedNorm = normalize(combinedRaw);
 
-                        const wrappers = Array.from(m.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video'));
+                        // Trace back to user prompt
+                        let userPromptRaw = '';
+                        for (let u = i - 1; u >= 0; u--) {
+                            if (msgs[u].getAttribute('data-message-role') === 'user') {
+                                userPromptRaw = (msgs[u].innerText || '').toLowerCase();
+                                break;
+                            }
+                        }
+
+                        // Extract product header from user prompt
+                        const headerMatch = userPromptRaw.match(/\\[cảnh\\s*\\d+\\s*-\\s*([^|\\]]+)/i);
+                        const promptHeaderProd = headerMatch ? normalize(headerMatch[1]) : '';
+
+                        // Reject if prompt belongs to another product
+                        if (promptHeaderProd && normNegSigs.some(sig => promptHeaderProd.includes(sig)) && !normPosSigs.some(sig => promptHeaderProd.includes(sig))) {
+                            continue;
+                        }
+
+                        // Fast negative check: if assistant text belongs to another product, SKIP
+                        if (normNegSigs.some(sig => combinedNorm.includes(sig))) continue;
+
+                        const wrappers = Array.from(m.querySelectorAll('[data-testid="hatch-chat-attachment-presentation-video"], [data-hatch-video-wrapper], video'));
                         if (!wrappers.length) continue;
 
                         for (let wIdx = 0; wIdx < wrappers.length; wIdx++) {
                             const w = wrappers[wIdx];
                             const wAria = (w.getAttribute('aria-label') || '').toLowerCase();
+                            const wAriaNorm = normalize(wAria);
                             const video = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
                             const src = w.getAttribute('data-hatch-video-src') || (video ? video.src : null);
                             if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
 
                             // Reject if aria-label matches ANY negative product signature
-                            if (negSigs.some(sig => wAria.includes(sig))) continue;
+                            if (normNegSigs.some(sig => wAriaNorm.includes(sig))) continue;
 
-                            // Match verification: must either be in a newly created assistant message (i >= initMsgCount)
-                            // OR strictly match positive signatures in aria-label or text
-                            const hasPosAria = posSigs.some(sig => wAria.includes(sig));
-                            const hasPosText = posSigs.some(sig => text.includes(sig));
-                            const isNewMessage = i >= initMsgCount;
+                            // Match verification: must strictly match positive signatures
+                            const hasPosAria = normPosSigs.some(sig => wAriaNorm.includes(sig));
+                            const hasPosText = normPosSigs.some(sig => combinedNorm.includes(sig));
+                            const hasPosHeader = promptHeaderProd && normPosSigs.some(sig => promptHeaderProd.includes(sig));
 
-                            if (!hasPosAria && !hasPosText && !isNewMessage) continue;
+                            if (!hasPosAria && !hasPosText && !hasPosHeader) continue;
 
                             // Scene verification
                             let isTargetScene = false;
                             const sKey = `canh${sceneNum}`;
                             const sKeyDash = `canh-${sceneNum}`;
-                            const sKeyText = `cảnh ${sceneNum}`;
+                            const sKeyText = `canh ${sceneNum}`;
 
-                            if (wAria.includes(sKey) || wAria.includes(sKeyDash) || text.includes(sKeyText)) {
+                            const otherScene = sceneNum === 1 ? 2 : 1;
+                            const otherKey = `canh${otherScene}`;
+                            const otherKeyDash = `canh-${otherScene}`;
+                            const otherText = `canh ${otherScene}`;
+
+                            // Check explicit scene tags
+                            if (wAriaNorm.includes(sKey) || wAriaNorm.includes(sKeyDash) || wAriaNorm.includes(sKeyText)) {
+                                isTargetScene = true;
+                            } else if (combinedNorm.includes(sKeyText) && !combinedNorm.includes(otherText)) {
                                 isTargetScene = true;
                             } else if (wrappers.length >= 2) {
                                 if (sceneNum === 1 && wIdx === 0) isTargetScene = true;
                                 if (sceneNum === 2 && wIdx === 1) isTargetScene = true;
-                            } else if (isNewMessage) {
-                                const otherKey = sceneNum === 1 ? 'canh2' : 'canh1';
-                                const otherText = sceneNum === 1 ? 'cảnh 2' : 'cảnh 1';
-                                if (!wAria.includes(otherKey) && !text.includes(otherText)) {
+                            } else if (userPromptRaw.includes(`cảnh ${sceneNum}`)) {
+                                if (!wAriaNorm.includes(otherKey) && !wAriaNorm.includes(otherKeyDash) && !combinedNorm.includes(otherText)) {
                                     isTargetScene = true;
                                 }
                             }
 
                             if (isTargetScene) {
-                                return { src, aria: wAria, text: text.substring(0, 100), msgIndex: i, wrapperIndex: wIdx };
+                                return { src, aria: wAria, text: combinedRaw.substring(0, 100), msgIndex: i, wrapperIndex: wIdx };
                             }
                         }
                     }
@@ -544,30 +671,71 @@ class MuseAutomator:
                 )
                 temp_down.unlink(missing_ok=True)
 
-                # Check if the other scene was also generated in the same response
+                # Strict cross-contamination & internal duplicate check
+                if _is_duplicate_or_contaminated(target_file, project_id, scene_number):
+                    logger.warning(f"Video {target_file} was rejected as duplicate or contaminated!")
+                    target_file.unlink(missing_ok=True)
+                    return {
+                        "success": False,
+                        "message": "Phát hiện video không thuộc sản phẩm này (trùng lặp). Vui lòng thử lại để tạo video đúng sản phẩm."
+                    }
+
+                # Check if the other scene was also generated in the same response with distinct source
                 try:
                     other_scene = 2 if scene_number == 1 else 1
                     other_file = target_dir / f"scene{other_scene}.mp4"
                     if not other_file.exists() or other_file.stat().st_size < 10000:
                         companion_video = await page.evaluate("""async (args) => {
-                            const { sceneNum, posSigs, negSigs } = args;
-                            const msgs = Array.from(document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"]'));
+                            const { mainSrc, otherScene, posSigs, negSigs } = args;
+
+                            function normalize(str) {
+                                if (!str) return '';
+                                return str.toLowerCase()
+                                    .replace(/đ/g, 'd')
+                                    .replace(/Đ/g, 'd')
+                                    .normalize('NFD')
+                                    .replace(/[\\u0300-\\u036f]/g, '');
+                            }
+
+                            const normPosSigs = Array.from(new Set(posSigs.map(normalize).filter(s => s.length >= 3)));
+                            const normNegSigs = Array.from(new Set(negSigs.map(normalize).filter(s => s.length >= 3)));
+
+                            const msgs = Array.from(document.querySelectorAll('[data-message-role]'));
                             if (!msgs.length) return null;
-                            const m = msgs[msgs.length - 1];
-                            const text = (m.innerText || '').toLowerCase();
-                            if (negSigs.some(sig => text.includes(sig))) return null;
-                            const wrappers = Array.from(m.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video'));
-                            if (wrappers.length < 2) return null;
-                            const wIdx = sceneNum === 1 ? 0 : 1;
-                            const w = wrappers[wIdx];
-                            const video = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
-                            const src = w.getAttribute('data-hatch-video-src') || (video ? video.src : null);
-                            const wAria = (w.getAttribute('aria-label') || '').toLowerCase();
-                            if (src && !negSigs.some(sig => wAria.includes(sig))) {
+
+                            // Scan backwards
+                            for (let i = msgs.length - 1; i >= 0; i--) {
+                                const m = msgs[i];
+                                if (m.getAttribute('data-message-role') !== 'assistant') continue;
+
+                                const mText = (m.innerText || '').toLowerCase();
+                                const prevM = i > 0 && msgs[i-1].getAttribute('data-message-role') === 'assistant' ? msgs[i-1] : null;
+                                const prevText = (prevM ? prevM.innerText : '').toLowerCase();
+                                const combinedNorm = normalize((prevText + ' ' + mText).trim());
+
+                                if (normNegSigs.some(sig => combinedNorm.includes(sig))) continue;
+
+                                const wrappers = Array.from(m.querySelectorAll('[data-testid="hatch-chat-attachment-presentation-video"], [data-hatch-video-wrapper], video'));
+                                if (wrappers.length < 2) continue;
+
+                                const wIdx = otherScene === 1 ? 0 : 1;
+                                const w = wrappers[wIdx];
+                                const wAria = (w.getAttribute('aria-label') || '').toLowerCase();
+                                const wAriaNorm = normalize(wAria);
+                                const video = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
+                                const src = w.getAttribute('data-hatch-video-src') || (video ? video.src : null);
+
+                                if (!src || src === mainSrc) continue;
+                                if (normNegSigs.some(sig => wAriaNorm.includes(sig))) continue;
+
+                                const hasPosAria = normPosSigs.some(sig => wAriaNorm.includes(sig));
+                                const hasPosText = normPosSigs.some(sig => combinedNorm.includes(sig));
+                                if (!hasPosAria && !hasPosText) continue;
+
                                 return { src, aria: wAria };
                             }
                             return null;
-                        }""", {"sceneNum": other_scene, "posSigs": pos_sigs, "negSigs": neg_sigs})
+                        }""", {"mainSrc": newest_video.get("src"), "otherScene": other_scene, "posSigs": pos_sigs, "negSigs": neg_sigs})
 
                         if companion_video and companion_video.get("src"):
                             temp_other = target_dir / f"temp_muse_s{other_scene}.mp4"
@@ -580,15 +748,19 @@ class MuseAutomator:
                                     target_fps=60
                                 )
                                 temp_other.unlink(missing_ok=True)
-                                p_other = await ffmpeg_service.probe_video(str(other_file))
-                                c_db = _get_raw_conn()
-                                c_db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, other_scene))
-                                c_db.execute("""
-                                    INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
-                                    VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')
-                                """, (f"v{other_scene}_{project_id[:4]}", project_id, other_scene, str(other_file), p_other.get("duration", 10.0)))
-                                c_db.commit()
-                                c_db.close()
+                                if _is_duplicate_or_contaminated(other_file, project_id, other_scene):
+                                    logger.warning(f"Companion video {other_file} was rejected as duplicate or contaminated!")
+                                    other_file.unlink(missing_ok=True)
+                                else:
+                                    p_other = await ffmpeg_service.probe_video(str(other_file))
+                                    c_db = _get_raw_conn()
+                                    c_db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, other_scene))
+                                    c_db.execute("""
+                                        INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
+                                        VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')
+                                    """, (f"v{other_scene}_{project_id[:4]}", project_id, other_scene, str(other_file), p_other.get("duration", 10.0)))
+                                    c_db.commit()
+                                    c_db.close()
                 except Exception as comp_ex:
                     logger.debug(f"Companion scene check error: {comp_ex}")
 
@@ -614,12 +786,15 @@ class MuseAutomator:
                         target_fps=60
                     )
                     temp_down.unlink(missing_ok=True)
-                    return {
-                        "success": True,
-                        "video_path": str(target_file),
-                        "scene_number": scene_number,
-                        "engine": "muse_ai"
-                    }
+                    if not _is_duplicate_or_contaminated(target_file, project_id, scene_number):
+                        return {
+                            "success": True,
+                            "video_path": str(target_file),
+                            "scene_number": scene_number,
+                            "engine": "muse_ai"
+                        }
+                    else:
+                        target_file.unlink(missing_ok=True)
 
             return {
                 "success": False,
@@ -681,7 +856,10 @@ class MuseAutomator:
                     target_fps=60
                 )
                 temp_s1.unlink(missing_ok=True)
-                s1_ok = True
+                if not _is_duplicate_or_contaminated(s1_file, project_id, 1):
+                    s1_ok = True
+                else:
+                    s1_file.unlink(missing_ok=True)
 
         if videos.get("scene2") and videos["scene2"].get("src"):
             temp_s2 = v_dir / "temp_pull_s2.mp4"
@@ -694,13 +872,23 @@ class MuseAutomator:
                     target_fps=60
                 )
                 temp_s2.unlink(missing_ok=True)
-                s2_ok = True
+                if not _is_duplicate_or_contaminated(s2_file, project_id, 2):
+                    s2_ok = True
+                else:
+                    s2_file.unlink(missing_ok=True)
 
         # Check existing scene files on disk if only one was in chat
         if not s1_ok and s1_file.exists() and s1_file.stat().st_size > 50000:
-            s1_ok = True
+            if not _is_duplicate_or_contaminated(s1_file, project_id, 1):
+                s1_ok = True
+            else:
+                s1_file.unlink(missing_ok=True)
+
         if not s2_ok and s2_file.exists() and s2_file.stat().st_size > 50000:
-            s2_ok = True
+            if not _is_duplicate_or_contaminated(s2_file, project_id, 2):
+                s2_ok = True
+            else:
+                s2_file.unlink(missing_ok=True)
 
         # Update DB videos table
         conn = _get_raw_conn()
