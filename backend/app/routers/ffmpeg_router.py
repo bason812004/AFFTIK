@@ -71,6 +71,13 @@ async def stitch_videos(req: StitchRequest, db = Depends(get_db)):
     if not v2_path.exists():
         raise HTTPException(status_code=400, detail="Chưa có Video Cảnh 2 trong dự án. Vui lòng nạp hoặc tạo Video Cảnh 2 trước.")
 
+    # Guard against identical duplicate scene videos
+    if v1_path.stat().st_size == v2_path.stat().st_size:
+        raise HTTPException(
+            status_code=400,
+            detail="Video Cảnh 1 và Video Cảnh 2 hiện đang là 2 video trùng lặp (giống hệt nhau). Vui lòng bấm 'Tạo Muse AI' hoặc nạp video Cảnh 2 riêng biệt trước khi ghép!"
+        )
+
     # Destination
     exports_dir = PROJECTS_DIR / req.project_id / "exports"
     exports_dir.mkdir(parents=True, exist_ok=True)

@@ -658,6 +658,15 @@ class PipelineRunner:
                 self.save_batch_state(state)
                 continue
 
+            if not res.get("success"):
+                try:
+                    # Attempt a final pull from Muse AI in case videos finished rendering right at the end
+                    pull_res = await muse_automator.pull_project_videos(next_pid)
+                    if pull_res.get("stitched"):
+                        res = {"success": True, "message": "Đã tự động lấy video từ Muse AI và hoàn tất!"}
+                except Exception as ex_fin:
+                    logger.debug(f"Final pull attempt error: {ex_fin}")
+
             if res.get("success"):
                 comp = state.get("completed_ids") or []
                 if next_pid not in comp:
@@ -1155,37 +1164,52 @@ class PipelineRunner:
                     v1_path = v1_res["video_path"]
                 else:
                     if video_engine == "muse":
-                        # User explicitly selected Muse AI: DO NOT fallback to Google TTS over static picture!
-                        await update_status(
-                            "Chờ video Muse AI",
-                            68,
-                            f"Muse AI đang xử lý video Cảnh 1 cho '{project.get('name')}'. Bạn có thể bấm 'Lấy Video từ Muse AI' trên giao diện sau khi Muse hoàn tất!",
-                            status="waiting_confirm"
-                        )
-                        return {
-                            "success": False,
-                            "needs_manual_pull": True,
-                            "engine": "muse",
-                            "message": "Muse AI chưa trả video trực tiếp. Vui lòng bấm 'Lấy Video từ Muse AI' trên giao diện khi Muse hoàn tất!"
-                        }
-                    await update_status("Tạo video Cảnh 1", 68, "Đang tạo video Cảnh 1 9:16 (10s 60fps) chuyển động mượt mà từ ảnh nhân vật & kịch bản...")
-                    synth_path = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
-                    await ffmpeg_service.create_scene_motion_video(
-                        image_path=char_image_path or original_image,
-                        output_path=synth_path,
-                        duration=10.0,
-                        motion_type="zoom_in",
-                        dialogue_text=script_dict.get("scene1_dialogue", "") or f"Giới thiệu {project.get('name', 'sản phẩm')}",
-                        fps=60
-                    )
-                    if not os.path.exists(synth_path) or os.path.getsize(synth_path) < 1000:
-                        await ffmpeg_service.create_image_video(
+                        # Auto-retry: scan chat or retry prompt once more before fallback
+                        logger.info(f"Muse AI Scene 1 not received directly for {project_id}. Checking chat pull and retrying...")
+                        await update_status("Tạo video Cảnh 1", 68, "Đang quét tìm video Cảnh 1 trên Muse AI...")
+                        pull_chk = await muse_automator.pull_project_videos(project_id)
+                        if pull_chk.get("s1_ok"):
+                            s1_cand = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
+                            if os.path.exists(s1_cand) and os.path.getsize(s1_cand) > 10000:
+                                v1_path = s1_cand
+
+                        if not v1_path:
+                            # Retry generate once
+                            await update_status("Tạo video Cảnh 1", 70, "Đang tự động gửi lại yêu cầu tạo Cảnh 1 lên Muse AI...")
+                            try:
+                                retry_res = await muse_automator.generate_scene_video(
+                                    project_id=project_id,
+                                    scene_number=1,
+                                    prompt=scene1_prompt,
+                                    character_image_path=char_image_path or original_image,
+                                    reference_image_path=char_image_path or original_image,
+                                    progress_callback=lambda m, p: update_status("Tạo video Cảnh 1", int(70 + (p * 0.05)), m)
+                                )
+                                if retry_res.get("success") and retry_res.get("video_path") and os.path.exists(retry_res["video_path"]):
+                                    v1_path = retry_res["video_path"]
+                            except Exception as ex_retry:
+                                logger.warning(f"Muse retry 1 failed: {ex_retry}")
+
+                    if not v1_path:
+                        # Auto-fallback: Never freeze the tool! Create high quality 60 FPS motion video
+                        await update_status("Tạo video Cảnh 1", 72, "Muse AI chưa trả video, tự động chuyển sang bộ kết xuất chuyển động 60 FPS...")
+                        synth_path = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
+                        await ffmpeg_service.create_scene_motion_video(
                             image_path=char_image_path or original_image,
                             output_path=synth_path,
                             duration=10.0,
+                            motion_type="zoom_in",
+                            dialogue_text=script_dict.get("scene1_dialogue", "") or f"Giới thiệu {project.get('name', 'sản phẩm')}",
                             fps=60
                         )
-                    v1_path = synth_path
+                        if not os.path.exists(synth_path) or os.path.getsize(synth_path) < 1000:
+                            await ffmpeg_service.create_image_video(
+                                image_path=char_image_path or original_image,
+                                output_path=synth_path,
+                                duration=10.0,
+                                fps=60
+                            )
+                        v1_path = synth_path
 
                 probe1 = await ffmpeg_service.probe_video(v1_path)
                 v1_id = str(uuid.uuid4())[:8]
@@ -1232,6 +1256,13 @@ class PipelineRunner:
                 await db.commit()
 
             if not v2_path:
+                # Check if Scene 2 was already pulled along with Scene 1 from Muse AI
+                s2_file = PROJECTS_DIR / project_id / "videos" / "scene2.mp4"
+                if s2_file.exists() and s2_file.stat().st_size > 10000 and (not v1_path or s2_file.stat().st_size != os.path.getsize(v1_path)):
+                    v2_path = str(s2_file)
+                    logger.info(f"Scene 2 already retrieved and verified distinct for {project_id}.")
+
+            if not v2_path:
                 v2_res = {}
                 try:
                     if video_engine == "muse":
@@ -1241,7 +1272,7 @@ class PipelineRunner:
                             scene_number=2,
                             prompt=scene2_prompt,
                             character_image_path=char_image_path or original_image,
-                            reference_image_path=char_image_path or original_image,
+                            reference_image_path=original_image or char_image_path,
                             progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
                         )
                     else:
@@ -1251,7 +1282,7 @@ class PipelineRunner:
                             scene_number=2,
                             prompt=scene2_prompt,
                             character_image_path=char_image_path or original_image,
-                            reference_image_path=char_image_path or original_image,
+                            reference_image_path=original_image or char_image_path,
                             on_log=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
                         )
                 except Exception as e_v2:
@@ -1259,40 +1290,59 @@ class PipelineRunner:
                     v2_res = {"success": False, "error": str(e_v2)}
 
                 if v2_res.get("success") and v2_res.get("video_path") and os.path.exists(v2_res["video_path"]) and os.path.getsize(v2_res["video_path"]) > 10000:
-                    v2_path = v2_res["video_path"]
-                else:
+                    cand_v2 = v2_res["video_path"]
+                    if not v1_path or os.path.getsize(v1_path) != os.path.getsize(cand_v2):
+                        v2_path = cand_v2
+
+                if not v2_path:
                     if video_engine == "muse":
-                        # User explicitly selected Muse AI: DO NOT fallback to Google TTS over static picture!
-                        await update_status(
-                            "Chờ video Muse AI",
-                            82,
-                            f"Muse AI đang xử lý video Cảnh 2 cho '{project.get('name')}'. Bạn có thể bấm 'Lấy Video từ Muse AI' trên giao diện sau khi Muse hoàn tất!",
-                            status="waiting_confirm"
-                        )
-                        return {
-                            "success": False,
-                            "needs_manual_pull": True,
-                            "engine": "muse",
-                            "message": "Muse AI chưa trả video trực tiếp. Vui lòng bấm 'Lấy Video từ Muse AI' trên giao diện khi Muse hoàn tất!"
-                        }
-                    await update_status("Tạo video Cảnh 2", 82, "Đang tạo video Cảnh 2 9:16 (10s 60fps) cận cảnh chi tiết sản phẩm...")
-                    synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
-                    await ffmpeg_service.create_scene_motion_video(
-                        image_path=char_image_path or original_image,
-                        output_path=synth_path2,
-                        duration=10.0,
-                        motion_type="closeup",
-                        dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
-                        fps=60
-                    )
-                    if not os.path.exists(synth_path2) or os.path.getsize(synth_path2) < 1000:
-                        await ffmpeg_service.create_image_video(
-                            image_path=char_image_path or original_image,
+                        # Auto-retry: check chat pull and retry once
+                        logger.info(f"Muse AI Scene 2 not received directly for {project_id}. Checking chat pull and retrying...")
+                        await update_status("Tạo video Cảnh 2", 82, "Đang quét tìm video Cảnh 2 trên Muse AI...")
+                        pull_chk2 = await muse_automator.pull_project_videos(project_id)
+                        if pull_chk2.get("s2_ok"):
+                            s2_cand = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
+                            if os.path.exists(s2_cand) and os.path.getsize(s2_cand) > 10000 and (not v1_path or os.path.getsize(v1_path) != os.path.getsize(s2_cand)):
+                                v2_path = s2_cand
+
+                        if not v2_path:
+                            await update_status("Tạo video Cảnh 2", 84, "Đang tự động gửi lại yêu cầu tạo Cảnh 2 lên Muse AI...")
+                            try:
+                                retry_v2 = await muse_automator.generate_scene_video(
+                                    project_id=project_id,
+                                    scene_number=2,
+                                    prompt=scene2_prompt,
+                                    character_image_path=char_image_path or original_image,
+                                    reference_image_path=original_image or char_image_path,
+                                    progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(84 + (p * 0.05)), m)
+                                )
+                                if retry_v2.get("success") and retry_v2.get("video_path") and os.path.exists(retry_v2["video_path"]):
+                                    cand_v2 = retry_v2["video_path"]
+                                    if not v1_path or os.path.getsize(v1_path) != os.path.getsize(cand_v2):
+                                        v2_path = cand_v2
+                            except Exception as ex_retry2:
+                                logger.warning(f"Muse retry 2 failed: {ex_retry2}")
+
+                    if not v2_path:
+                        # Auto-fallback: Never freeze the tool! Create high quality 60 FPS closeup on product
+                        await update_status("Tạo video Cảnh 2", 88, "Muse AI chưa trả video, tự động kết xuất video cận cảnh sản phẩm 60 FPS...")
+                        synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
+                        await ffmpeg_service.create_scene_motion_video(
+                            image_path=original_image or char_image_path,
                             output_path=synth_path2,
                             duration=10.0,
+                            motion_type="closeup",
+                            dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
                             fps=60
                         )
-                    v2_path = synth_path2
+                        if not os.path.exists(synth_path2) or os.path.getsize(synth_path2) < 1000:
+                            await ffmpeg_service.create_image_video(
+                                image_path=original_image or char_image_path,
+                                output_path=synth_path2,
+                                duration=10.0,
+                                fps=60
+                            )
+                        v2_path = synth_path2
 
                 probe2 = await ffmpeg_service.probe_video(v2_path)
                 v2_id = str(uuid.uuid4())[:8]
@@ -1339,6 +1389,40 @@ class PipelineRunner:
                 v2_path = synth_path2
 
             if v1_path and v2_path and os.path.exists(v1_path) and os.path.exists(v2_path):
+                # Guard against identical duplicate scene videos
+                if os.path.getsize(v1_path) == os.path.getsize(v2_path):
+                    logger.warning(f"Detected duplicate scene videos for {project_id}! Scene 1 and Scene 2 have identical size ({os.path.getsize(v1_path)}B). Regenerating distinct Scene 2...")
+                    try:
+                        os.unlink(v2_path)
+                    except Exception:
+                        pass
+                    v2_path = None
+                    await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
+                    await db.commit()
+
+                    # Regenerate Scene 2 with distinct closeup on product
+                    synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
+                    await ffmpeg_service.create_scene_motion_video(
+                        image_path=original_image or char_image_path,
+                        output_path=synth_path2,
+                        duration=10.0,
+                        motion_type="closeup",
+                        dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
+                        fps=60
+                    )
+                    v2_path = synth_path2
+                    probe2 = await ffmpeg_service.probe_video(v2_path)
+                    v2_id = str(uuid.uuid4())[:8]
+                    await db.execute("""
+                        INSERT INTO videos (id, project_id, script_id, scene_number, video_path, duration, resolution, fps, status)
+                        VALUES (?, ?, ?, 2, ?, ?, ?, ?, 'ready')
+                    """, (
+                        v2_id, project_id, script_dict.get("id"), v2_path,
+                        probe2.get("duration", 10.0), f"{probe2.get('width', 1080)}x{probe2.get('height', 1920)}",
+                        probe2.get("fps", 60.0)
+                    ))
+                    await db.commit()
+
                 await update_status("Ghép video FFmpeg", 92, "Đang xử lý chuẩn hóa 1080x1920 @ 60fps và ghép 2 cảnh...")
                 
                 stitch_res = await ffmpeg_service.stitch_scenes(

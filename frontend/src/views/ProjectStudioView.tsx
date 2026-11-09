@@ -1177,6 +1177,10 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
 
   // Handlers for Step 4: FFmpeg Stitch
   const handleStitch = async () => {
+    if (isDuplicateScenes) {
+      alert("Cảnh báo: Video Cảnh 1 và Video Cảnh 2 hiện đang trùng lặp (giống hệt nhau). Vui lòng bấm 'Tạo lại Cảnh 2' hoặc 'Lấy Video từ Muse AI' để tách biệt 2 cảnh trước khi ghép!");
+      return;
+    }
     try {
       setStitching(true);
       const res: any = await api.stitchVideos({
@@ -1323,7 +1327,13 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
 
   const scene1Video = project.videos?.find((v: any) => v.scene_number === 1);
   const scene2Video = project.videos?.find((v: any) => v.scene_number === 2);
-  const hasBothVideos = Boolean(scene1Video && scene2Video);
+  const isDuplicateScenes = Boolean(
+    scene1Video &&
+    scene2Video &&
+    ((scene1Video.file_size && scene2Video.file_size && scene1Video.file_size === scene2Video.file_size) ||
+     (scene1Video.video_path && scene2Video.video_path && scene1Video.video_path === scene2Video.video_path))
+  );
+  const hasBothVideos = Boolean(scene1Video && scene2Video && !isDuplicateScenes);
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
@@ -3541,6 +3551,34 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
             </div>
           )}
 
+          {isDuplicateScenes && (
+            <div className="p-4 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg shadow-amber-950/30">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                <div>
+                  <div className="font-bold text-amber-300">Phát hiện Video Cảnh 1 và Cảnh 2 trùng lặp (giống hệt nhau)!</div>
+                  <div className="text-[11px] text-amber-200/80">Cần có 2 cảnh riêng biệt (Cảnh 1: Nhân vật mở đầu; Cảnh 2: Cận cảnh chi tiết sản phẩm) trước khi ghép video.</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSceneVideo(2)}
+                  className="px-3 py-1.5 rounded-lg bg-red-600/30 hover:bg-red-600/50 border border-red-500/40 text-red-200 text-xs font-bold transition-all"
+                >
+                  Xóa Cảnh 2 Trùng Lặp
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePullFromMuse}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-emerald-200 text-xs font-bold transition-all"
+                >
+                  Quét Lại Muse AI
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Cards for Video 1 and Video 2 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Card 1: Video 1 - Scene 1 */}
@@ -3766,17 +3804,17 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
                 )}
               </div>
 
-              {/* Reference Character Image Banner */}
+              {/* Reference Product Image Banner */}
               <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[#12161f] border border-[#232a3b]">
                 <img
-                  src={getMediaUrl(project?.primary_character_image_path || '')}
-                  alt="Ảnh tham chiếu nhân vật AI"
+                  src={getMediaUrl(project?.original_image_path || project?.primary_character_image_path || '')}
+                  alt="Ảnh tham chiếu Cảnh 2 (Ảnh SP)"
                   className="w-10 h-14 rounded-lg object-cover border border-[#232a3b] shrink-0"
                   onError={(e: any) => { e.target.style.display = 'none'; }}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="text-[10px] text-pink-400 font-bold flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Ảnh tham chiếu Cảnh 2
+                    <Check className="w-3 h-3" /> Ảnh tham chiếu Cảnh 2 (Ảnh SP)
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <a
