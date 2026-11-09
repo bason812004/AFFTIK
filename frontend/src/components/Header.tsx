@@ -28,6 +28,7 @@ interface HeaderProps {
   onModeChange: (mode: AutomationMode) => void;
   geminiStatus: ServiceAccountStatus;
   flowStatus: ServiceAccountStatus;
+  museStatus?: ServiceAccountStatus;
   ffmpegStatus: { installed?: boolean; version?: string };
   onRefreshStatus: () => void;
 }
@@ -37,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   onModeChange,
   geminiStatus,
   flowStatus,
+  museStatus,
   ffmpegStatus,
   onRefreshStatus
 }) => {
@@ -44,6 +46,8 @@ export const Header: React.FC<HeaderProps> = ({
   const [switchingGemini, setSwitchingGemini] = useState(false);
   const [connectingFlow, setConnectingFlow] = useState(false);
   const [switchingFlow, setSwitchingFlow] = useState(false);
+  const [connectingMuse, setConnectingMuse] = useState(false);
+  const [switchingMuse, setSwitchingMuse] = useState(false);
 
   const handleConnectGemini = async () => {
     try {
@@ -95,8 +99,34 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  const handleConnectMuse = async () => {
+    try {
+      setConnectingMuse(true);
+      await api.connectMuse();
+      await onRefreshStatus();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setConnectingMuse(false);
+    }
+  };
+
+  const handleSwitchMuseAccount = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      setSwitchingMuse(true);
+      await api.logoutMuse();
+      await onRefreshStatus();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSwitchingMuse(false);
+    }
+  };
+
   const geminiAccountLabel = geminiStatus?.account_display || geminiStatus?.account_email || geminiStatus?.account_name || '';
   const flowAccountLabel = flowStatus?.account_display || flowStatus?.account_email || flowStatus?.account_name || '';
+  const museAccountLabel = museStatus?.account_display || museStatus?.account_email || museStatus?.account_name || '';
 
   return (
     <header className="min-h-16 py-2 border-b border-[#232a3b] bg-[#12161f]/95 backdrop-blur-md px-5 flex items-center justify-between gap-3 flex-wrap sticky top-0 z-40">
@@ -249,6 +279,53 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <RefreshCw className={`w-3 h-3 ${switchingFlow ? 'animate-spin' : ''}`} />
               <span>{flowStatus?.logged_in ? 'Đổi TK Flow' : 'Chọn TK Flow'}</span>
+            </button>
+          </div>
+
+          {/* Muse AI Account Badge */}
+          <div
+            className={`flex items-center rounded-xl border text-xs transition-all overflow-hidden ${
+              museStatus?.logged_in
+                ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-200'
+                : 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+            }`}
+          >
+            <button
+              onClick={handleConnectMuse}
+              disabled={connectingMuse}
+              title={museStatus?.message || 'Nhấn để mở / kiểm tra tài khoản Muse AI'}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-white/5 transition-colors"
+            >
+              {connectingMuse ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              )}
+              <span className="font-bold text-slate-300">Muse AI:</span>
+              {museStatus?.status === 'switching_account' ? (
+                <span className="font-bold text-amber-300 animate-pulse flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                  <span>Chờ đăng nhập Chrome...</span>
+                </span>
+              ) : museStatus?.logged_in ? (
+                <span className="font-extrabold text-emerald-300 flex items-center gap-1 max-w-[200px] truncate">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="truncate">{museAccountLabel || 'Đã kết nối'}</span>
+                </span>
+              ) : (
+                <span className="font-extrabold text-amber-300 animate-pulse">
+                  Đăng nhập Muse AI
+                </span>
+              )}
+            </button>
+            <button
+              onClick={handleSwitchMuseAccount}
+              disabled={switchingMuse}
+              title="Mở cửa sổ Chrome để đổi hoặc đăng nhập tài khoản Muse AI mới"
+              className="px-2.5 py-1.5 border-l border-emerald-500/30 bg-rose-500/25 hover:bg-rose-500/40 text-[11px] font-extrabold text-rose-200 flex items-center gap-1 transition-colors"
+            >
+              <RefreshCw className={`w-3 h-3 ${switchingMuse ? 'animate-spin' : ''}`} />
+              <span>{museStatus?.logged_in ? 'Đổi TK' : 'Chọn TK'}</span>
             </button>
           </div>
 

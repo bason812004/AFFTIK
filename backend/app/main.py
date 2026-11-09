@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.app.database import init_db
 from backend.app.config import DATA_DIR
 from backend.app.services.browser_manager import browser_manager
-from backend.app.routers import projects, gemini, flow, ffmpeg_router, prompts, quality, settings, logs
+from backend.app.routers import projects, gemini, flow, muse, ffmpeg_router, prompts, quality, settings, logs
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,6 +60,7 @@ app.mount("/data", StaticFiles(directory=str(DATA_DIR)), name="data")
 app.include_router(projects.router)
 app.include_router(gemini.router)
 app.include_router(flow.router)
+app.include_router(muse.router)
 app.include_router(ffmpeg_router.router)
 app.include_router(prompts.router)
 app.include_router(quality.router)

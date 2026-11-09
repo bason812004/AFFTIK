@@ -10,6 +10,7 @@ import { ProjectStudioView } from './views/ProjectStudioView';
 import { PromptLibraryView } from './views/PromptLibraryView';
 import { GeminiStudioView } from './views/GeminiStudioView';
 import { FlowStudioView } from './views/FlowStudioView';
+import { MuseStudioView } from './views/MuseStudioView';
 import { StitchStudioView } from './views/StitchStudioView';
 import { GalleryView } from './views/GalleryView';
 import { SettingsView } from './views/SettingsView';
@@ -23,19 +24,22 @@ export function App() {
   // Status of services
   const [geminiStatus, setGeminiStatus] = useState<any>({ logged_in: false });
   const [flowStatus, setFlowStatus] = useState<any>({ logged_in: false });
+  const [museStatus, setMuseStatus] = useState<any>({ logged_in: false });
   const [ffmpegStatus, setFFmpegStatus] = useState<any>({ installed: true });
 
   const refreshStatuses = async () => {
     try {
-      const [gStatus, fStatus, ffStatus, projects] = await Promise.allSettled([
+      const [gStatus, fStatus, mStatus, ffStatus, projects] = await Promise.allSettled([
         api.getGeminiStatus(),
         api.getFlowStatus(),
+        api.getMuseStatus(),
         api.getFFmpegStatus(),
         api.listProjects()
       ]);
 
       if (gStatus.status === 'fulfilled') setGeminiStatus(gStatus.value);
       if (fStatus.status === 'fulfilled') setFlowStatus(fStatus.value);
+      if (mStatus.status === 'fulfilled') setMuseStatus(mStatus.value);
       if (ffStatus.status === 'fulfilled') setFFmpegStatus(ffStatus.value);
       if (projects.status === 'fulfilled') {
         setProjectCount(projects.value.length);
@@ -87,6 +91,7 @@ export function App() {
         }}
         geminiStatus={geminiStatus}
         flowStatus={flowStatus}
+        museStatus={museStatus}
         ffmpegStatus={ffmpegStatus}
         onRefreshStatus={refreshStatuses}
       />
@@ -169,6 +174,10 @@ export function App() {
 
           {currentView === 'flow_studio' && (
             <FlowStudioView status={flowStatus} onRefresh={refreshStatuses} />
+          )}
+
+          {currentView === 'muse_studio' && (
+            <MuseStudioView status={museStatus} onRefresh={refreshStatuses} />
           )}
 
           {currentView === 'stitch_studio' && (

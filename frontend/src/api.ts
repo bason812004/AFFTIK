@@ -354,6 +354,43 @@ export const api = {
     return handleResponse(res);
   },
 
+  // Muse AI Automation
+  async getMuseStatus() {
+    const res = await fetch(`${API_BASE}/muse/status`);
+    return handleResponse(res);
+  },
+
+  async connectMuse() {
+    const res = await fetch(`${API_BASE}/muse/connect`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  async logoutMuse(fullLogout: boolean = true) {
+    const res = await fetch(`${API_BASE}/muse/logout?full_logout=${fullLogout}`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  async generateMuseVideo(projectId: string, sceneNumber: 1 | 2) {
+    const res = await fetch(`${API_BASE}/muse/generate-video`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: projectId, scene_number: sceneNumber })
+    });
+    return handleResponse(res);
+  },
+
+  async uploadManualMuseVideo(projectId: string, sceneNumber: 1 | 2, file: File) {
+    const fd = new FormData();
+    fd.append('project_id', projectId);
+    fd.append('scene_number', sceneNumber.toString());
+    fd.append('file', file);
+    const res = await fetch(`${API_BASE}/muse/upload-manual-video`, {
+      method: 'POST',
+      body: fd
+    });
+    return handleResponse(res);
+  },
+
   async uploadManualVideo(projectId: string, sceneNumber: 1 | 2, file: File) {
     const fd = new FormData();
     fd.append('project_id', projectId);

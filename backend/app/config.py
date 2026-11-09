@@ -10,6 +10,7 @@ PROJECTS_DIR = DATA_DIR / "projects"
 PROFILES_DIR = DATA_DIR / "browser_profiles"
 GEMINI_PROFILE_DIR = PROFILES_DIR / "gemini"
 FLOW_PROFILE_DIR = PROFILES_DIR / "flow"
+MUSE_PROFILE_DIR = PROFILES_DIR / "muse"
 DB_PATH = DATA_DIR / "studio.db"
 
 # Ensure directories exist
@@ -18,6 +19,7 @@ PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 PROFILES_DIR.mkdir(parents=True, exist_ok=True)
 GEMINI_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 FLOW_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+MUSE_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Port & Network Settings (Local only)
 HOST = "127.0.0.1"

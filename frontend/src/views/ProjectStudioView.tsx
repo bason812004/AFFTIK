@@ -917,6 +917,32 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
     }
   };
 
+  const handleGenerateMuseVideo = async (sceneNum: 1 | 2) => {
+    try {
+      if (sceneNum === 1) setGeneratingVideo1(true);
+      if (sceneNum === 2) setGeneratingVideo2(true);
+      setVideoProgressMsg(`Đang mở Muse AI tạo Video Cảnh ${sceneNum}...`);
+
+      const res = await api.generateMuseVideo(effectiveId, sceneNum);
+      if (res.success) {
+        await loadProject(true);
+      } else if (res.needs_login) {
+        alert(
+          res.message ||
+          'Vui lòng đăng nhập tài khoản Muse AI trên cửa sổ trình duyệt Chrome vừa mở, sau đó bấm tạo lại.'
+        );
+      } else {
+        alert(res.message || `Đang xử lý video trên Muse AI.`);
+      }
+    } catch (e: any) {
+      alert(`Lỗi tạo Video Cảnh ${sceneNum} bằng Muse AI: ` + e.message);
+    } finally {
+      if (sceneNum === 1) setGeneratingVideo1(false);
+      if (sceneNum === 2) setGeneratingVideo2(false);
+      setVideoProgressMsg('');
+    }
+  };
+
   const [importingVideo1, setImportingVideo1] = useState(false);
   const [importingVideo2, setImportingVideo2] = useState(false);
 
@@ -3550,6 +3576,16 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
                   </button>
 
                   <button
+                    onClick={() => handleGenerateMuseVideo(1)}
+                    disabled={generatingVideo1 || importingVideo1}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+                    title="Tạo video Cảnh 1 bằng Muse AI"
+                  >
+                    {generatingVideo1 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" /> : <Sparkles className="w-3.5 h-3.5 text-emerald-400" />}
+                    <span>Tạo Muse AI</span>
+                  </button>
+
+                  <button
                     onClick={() => handleGenerateFastVideo(1)}
                     disabled={generatingFast1 || generatingVideo1}
                     className="px-3 py-2 rounded-xl bg-[#12161f] hover:bg-[#232a3b] border border-[#232a3b] text-amber-300 text-xs font-semibold flex items-center gap-1"
@@ -3721,6 +3757,16 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
                   >
                     {generatingVideo2 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-pink-400" /> : <Play className="w-3.5 h-3.5 text-pink-400" />}
                     <span>Tạo Flow</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleGenerateMuseVideo(2)}
+                    disabled={generatingVideo2 || importingVideo2}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+                    title="Tạo video Cảnh 2 bằng Muse AI"
+                  >
+                    {generatingVideo2 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" /> : <Sparkles className="w-3.5 h-3.5 text-emerald-400" />}
+                    <span>Tạo Muse AI</span>
                   </button>
 
                   <button

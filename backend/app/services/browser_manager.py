@@ -5,7 +5,7 @@ import asyncio
 from typing import Optional, Dict, Any
 from pathlib import Path
 from playwright.async_api import async_playwright, BrowserContext, Page, Playwright
-from backend.app.config import GEMINI_PROFILE_DIR, FLOW_PROFILE_DIR
+from backend.app.config import GEMINI_PROFILE_DIR, FLOW_PROFILE_DIR, MUSE_PROFILE_DIR
 from backend.app.database import get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -93,12 +93,16 @@ class BrowserManager:
         self.playwright: Optional[Playwright] = None
         self.gemini_context: Optional[BrowserContext] = None
         self.flow_context: Optional[BrowserContext] = None
+        self.muse_context: Optional[BrowserContext] = None
         self.gemini_page: Optional[Page] = None
         self.flow_page: Optional[Page] = None
+        self.muse_page: Optional[Page] = None
         self._gemini_headless: bool = True
         self._flow_headless: bool = True
+        self._muse_headless: bool = True
         self._gemini_switching: bool = False
         self._flow_switching: bool = False
+        self._muse_switching: bool = False
         self._lock: Optional[asyncio.Lock] = None
 
     def _get_lock(self) -> asyncio.Lock:
@@ -246,6 +250,70 @@ class BrowserManager:
             """)
 
             return self.flow_page
+
+    async def get_muse_page(self, headed: bool = False, force_headed: bool = False) -> Page:
+        """
+        Retrieves the active Muse AI page.
+        By default, runs headless in background.
+        force_headed=True is used when the user clicks 'Đăng nhập Muse AI' to interact.
+        """
+        async with self._get_lock():
+            await self._ensure_playwright()
+
+            is_headless = not force_headed and not headed
+
+            if self.muse_context and self.muse_page and not self.muse_page.is_closed():
+                try:
+                    await self.muse_page.title()
+                    if force_headed and self._muse_headless:
+                        await self.close_muse_browser()
+                    else:
+                        return self.muse_page
+                except Exception:
+                    self.muse_page = None
+                    self.muse_context = None
+
+            os.makedirs(MUSE_PROFILE_DIR, exist_ok=True)
+            _clean_profile_locks(MUSE_PROFILE_DIR)
+
+            muse_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--lang=vi"
+            ]
+            if not is_headless:
+                muse_args.append("--start-maximized")
+
+            for attempt in range(3):
+                try:
+                    self.muse_context = await self.playwright.chromium.launch_persistent_context(
+                        user_data_dir=str(MUSE_PROFILE_DIR),
+                        channel="chrome",
+                        headless=is_headless,
+                        user_agent=USER_AGENT,
+                        viewport=None if not is_headless else {"width": 1280, "height": 800},
+                        args=muse_args,
+                        ignore_default_args=["--enable-automation"]
+                    )
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        _clean_profile_locks(MUSE_PROFILE_DIR)
+                        if "ProcessSingleton" in str(e):
+                            _kill_orphaned_chrome_for_profile(MUSE_PROFILE_DIR)
+                        await asyncio.sleep(1.2)
+                    else:
+                        raise e
+
+            self._muse_headless = is_headless
+            self.muse_page = self._pick_usable_page(self.muse_context) or await self.muse_context.new_page()
+
+            await self.muse_page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            """)
+
+            return self.muse_page
 
     async def _extract_account_info(
         self,
@@ -821,9 +889,208 @@ class BrowserManager:
                 pass
         return True
 
+    async def _is_muse_page_authenticated(self, page: Page) -> bool:
+        """Checks whether Muse AI page is logged in."""
+        try:
+            from urllib.parse import urlparse
+            current_url = page.url or ""
+            parsed = urlparse(current_url)
+            host = (parsed.netloc or "").lower()
+            if not host:
+                return False
+            if "muse.ai" not in host and "musevideo.ai" not in host:
+                return False
+
+            if "/login" in parsed.path or "/join" in parsed.path or "/signup" in parsed.path:
+                return False
+
+            dom_state = await page.evaluate("""() => {
+                const hasSignIn = Boolean(
+                    document.querySelector("a[href*='/login'], a[href*='/signin'], button[aria-label*='Sign in' i], button[aria-label*='Log in' i]") ||
+                    Array.from(document.querySelectorAll('button, a')).some(b => {
+                        const t = (b.innerText || '').trim().toLowerCase();
+                        return t === 'log in' || t === 'sign in' || t === 'đăng nhập';
+                    })
+                );
+                const hasUserEl = Boolean(
+                    document.querySelector(
+                        "[aria-label*='account' i], [aria-label*='profile' i], [aria-label*='user' i], " +
+                        "a[href*='/dashboard'], a[href*='/create'], a[href*='/settings'], a[href*='/profile'], " +
+                        ".user-menu, .avatar, img[src*='avatar'], button.user-button"
+                    )
+                );
+                return { hasSignIn, hasUserEl };
+            }""")
+            if dom_state.get("hasSignIn"):
+                return False
+            if dom_state.get("hasUserEl"):
+                return True
+            if parsed.path in ["/", "/dashboard", "/create", "/videos", "/projects"] and not dom_state.get("hasSignIn"):
+                return True
+            return False
+        except Exception:
+            return False
+
+    async def check_muse_login(self, target_url: str = "https://muse.ai", force_open: bool = False) -> Dict[str, Any]:
+        """Checks Muse AI login state."""
+        empty_acct = {"account_email": "", "account_name": "", "account_avatar": "", "account_display": ""}
+        saved_login = get_setting("muse_logged_in")
+        if not force_open:
+            if self._muse_switching:
+                if not self.muse_page or self.muse_page.is_closed():
+                    return {
+                        "logged_in": False,
+                        "status": "switching_account",
+                        "message": "Đang mở cửa sổ Chrome đăng nhập tài khoản Muse AI mới. Vui lòng đăng nhập trên cửa sổ Chrome.",
+                        **empty_acct
+                    }
+                try:
+                    is_logged_in = await self._is_muse_page_authenticated(self.muse_page)
+                    if is_logged_in:
+                        self._muse_switching = False
+                        set_setting("muse_logged_in", "true")
+                        acct = await self._extract_account_info(MUSE_PROFILE_DIR, self.muse_page, "muse")
+                        return {
+                            "logged_in": True,
+                            "status": "connected",
+                            "message": f"Đã kết nối tài khoản Muse AI: {acct['account_display']}" if acct["account_display"] else "Đã kết nối Muse AI.",
+                            **acct
+                        }
+                    else:
+                        return {
+                            "logged_in": False,
+                            "status": "switching_account",
+                            "message": "Vui lòng đăng nhập tài khoản Muse AI trên cửa sổ Chrome vừa mở...",
+                            **empty_acct
+                        }
+                except Exception:
+                    return {
+                        "logged_in": False,
+                        "status": "switching_account",
+                        "message": "Đang chờ bạn đăng nhập tài khoản Muse AI trên cửa sổ Chrome...",
+                        **empty_acct
+                    }
+
+            if not self.muse_context or not self.muse_page or self.muse_page.is_closed():
+                if saved_login == "true":
+                    acct = await self._extract_account_info(MUSE_PROFILE_DIR, None, "muse")
+                    return {
+                        "logged_in": True,
+                        "status": "connected",
+                        "message": f"Đã kết nối Muse AI ({acct['account_display']})" if acct['account_display'] else "Đã lưu phiên đăng nhập Muse AI (Sẵn sàng).",
+                        **acct
+                    }
+                return {
+                    "logged_in": False,
+                    "status": "needs_login",
+                    "message": "Chưa kết nối Muse AI. Nhấn 'Đăng nhập Muse AI' để kết nối.",
+                    **empty_acct
+                }
+            try:
+                is_logged_in = await self._is_muse_page_authenticated(self.muse_page)
+                if is_logged_in:
+                    set_setting("muse_logged_in", "true")
+                    acct = await self._extract_account_info(MUSE_PROFILE_DIR, self.muse_page, "muse")
+                    return {
+                        "logged_in": True,
+                        "status": "connected",
+                        "message": f"Muse AI đang mở ({acct['account_display']})." if acct['account_display'] else "Muse AI đang mở và sẵn sàng.",
+                        **acct
+                    }
+                else:
+                    set_setting("muse_logged_in", "false")
+                    return {
+                        "logged_in": False,
+                        "status": "needs_login",
+                        "message": "Vui lòng đăng nhập tài khoản Muse AI trên cửa sổ Chrome.",
+                        **empty_acct
+                    }
+            except Exception:
+                if saved_login == "true":
+                    acct = await self._extract_account_info(MUSE_PROFILE_DIR, None, "muse")
+                    return {
+                        "logged_in": True,
+                        "status": "connected",
+                        "message": f"Phiên đăng nhập Muse AI đã lưu ({acct['account_display']}).",
+                        **acct
+                    }
+                return {
+                    "logged_in": False,
+                    "status": "needs_login",
+                    "message": "Chưa kết nối Muse AI.",
+                    **empty_acct
+                }
+
+        # force_open=True: user explicitly clicked 'Đăng nhập'
+        try:
+            page = await self.get_muse_page(headed=True, force_headed=True)
+            current_url = (page.url or "").lower()
+            if "muse.ai" not in current_url and "musevideo.ai" not in current_url:
+                await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(2)
+
+            is_logged_in = await self._is_muse_page_authenticated(page)
+            if is_logged_in:
+                set_setting("muse_logged_in", "true")
+                acct = await self._extract_account_info(MUSE_PROFILE_DIR, page, "muse")
+                return {
+                    "logged_in": True,
+                    "status": "connected",
+                    "message": f"Đã kết nối Muse AI: {acct['account_display']}" if acct["account_display"] else "Đã kết nối Muse AI.",
+                    **acct
+                }
+
+            set_setting("muse_logged_in", "false")
+            login_url = "https://muse.ai/login"
+            await page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
+            return {
+                "logged_in": False,
+                "status": "needs_login",
+                "message": "Đã hiển thị form đăng nhập Muse AI trên cửa sổ Chrome. Vui lòng đăng nhập tài khoản.",
+                **empty_acct
+            }
+        except Exception as e:
+            return {
+                "logged_in": False,
+                "status": "error",
+                "message": f"Không thể kết nối Muse AI: {str(e)}",
+                **empty_acct
+            }
+
+    async def close_muse_browser(self):
+        try:
+            if self.muse_context:
+                await self.muse_context.close()
+        except Exception:
+            pass
+        self.muse_page = None
+        self.muse_context = None
+        await asyncio.sleep(0.5)
+        _clean_profile_locks(MUSE_PROFILE_DIR)
+
+    async def clear_muse_session(self, open_login: bool = True, full_logout: bool = True):
+        self._muse_switching = True
+        set_setting("muse_logged_in", "logged_out")
+        self._clear_saved_account_info("muse")
+        await self.close_muse_browser()
+        _kill_orphaned_chrome_for_profile(MUSE_PROFILE_DIR)
+        _clean_profile_locks(MUSE_PROFILE_DIR)
+        if full_logout:
+            _clean_profile_session(MUSE_PROFILE_DIR)
+
+        if open_login:
+            page = await self.get_muse_page(headed=True, force_headed=True)
+            login_url = "https://muse.ai/login"
+            try:
+                await page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
+            except Exception:
+                pass
+        return True
+
     async def close_all(self):
         await self.close_gemini_browser()
         await self.close_flow_browser()
+        await self.close_muse_browser()
         if self.playwright:
             try:
                 await self.playwright.stop()

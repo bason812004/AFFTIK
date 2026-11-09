@@ -12,6 +12,7 @@ from backend.app.services.prompt_templates import render_prompt
 from backend.app.services.gemini_api_service import gemini_api_service
 from backend.app.services.gemini_automator import gemini_automator
 from backend.app.services.flow_automator import flow_automator
+from backend.app.services.muse_automator import muse_automator
 from backend.app.services.ffmpeg_service import ffmpeg_service
 from backend.app.services.script_parser import parse_gemini_scripts
 
@@ -1086,16 +1087,28 @@ class PipelineRunner:
                 await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 1", (project_id,))
                 await db.commit()
 
+            video_engine = get_setting("video_engine", "muse")
             if not v1_path:
-                await update_status("Tạo video Cảnh 1", 62, "Đang đưa ảnh nhân vật và prompt Cảnh 1 vào Google Flow (Veo 3)...")
-                v1_res = await flow_automator.generate_scene_video(
-                    project_id=project_id,
-                    scene_number=1,
-                    prompt=scene1_prompt,
-                    character_image_path=char_image_path or original_image,
-                    reference_image_path=char_image_path or original_image,
-                    on_log=lambda m, p: update_status("Tạo video Cảnh 1", int(60 + (p * 0.15)), m)
-                )
+                if video_engine == "muse":
+                    await update_status("Tạo video Cảnh 1", 62, "Đang đưa ảnh nhân vật và prompt Cảnh 1 vào Muse AI...")
+                    v1_res = await muse_automator.generate_scene_video(
+                        project_id=project_id,
+                        scene_number=1,
+                        prompt=scene1_prompt,
+                        character_image_path=char_image_path or original_image,
+                        reference_image_path=char_image_path or original_image,
+                        progress_callback=lambda m, p: update_status("Tạo video Cảnh 1", int(60 + (p * 0.15)), m)
+                    )
+                else:
+                    await update_status("Tạo video Cảnh 1", 62, "Đang đưa ảnh nhân vật và prompt Cảnh 1 vào Google Flow (Veo 3)...")
+                    v1_res = await flow_automator.generate_scene_video(
+                        project_id=project_id,
+                        scene_number=1,
+                        prompt=scene1_prompt,
+                        character_image_path=char_image_path or original_image,
+                        reference_image_path=char_image_path or original_image,
+                        on_log=lambda m, p: update_status("Tạo video Cảnh 1", int(60 + (p * 0.15)), m)
+                    )
 
                 if v1_res.get("out_of_credits"):
                     msg = v1_res.get("message") or "⚠️ Tài khoản Google Flow đang dùng đã HẾT TÍN DỤNG! Đã lưu phiên làm việc (Cảnh 1) và mở đăng nhập trên Chrome. Sau khi bạn đăng nhập tài khoản mới thành công, hệ thống sẽ TỰ ĐỘNG chạy tiếp!"
@@ -1158,15 +1171,26 @@ class PipelineRunner:
                 await db.commit()
 
             if not v2_path:
-                await update_status("Tạo video Cảnh 2", 78, "Đang đưa prompt Cảnh 2 (zoom sản phẩm) vào Google Flow...")
-                v2_res = await flow_automator.generate_scene_video(
-                    project_id=project_id,
-                    scene_number=2,
-                    prompt=scene2_prompt,
-                    character_image_path=char_image_path or original_image,
-                    reference_image_path=char_image_path or original_image,
-                    on_log=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
-                )
+                if video_engine == "muse":
+                    await update_status("Tạo video Cảnh 2", 78, "Đang đưa prompt Cảnh 2 vào Muse AI...")
+                    v2_res = await muse_automator.generate_scene_video(
+                        project_id=project_id,
+                        scene_number=2,
+                        prompt=scene2_prompt,
+                        character_image_path=char_image_path or original_image,
+                        reference_image_path=char_image_path or original_image,
+                        progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
+                    )
+                else:
+                    await update_status("Tạo video Cảnh 2", 78, "Đang đưa prompt Cảnh 2 (zoom sản phẩm) vào Google Flow...")
+                    v2_res = await flow_automator.generate_scene_video(
+                        project_id=project_id,
+                        scene_number=2,
+                        prompt=scene2_prompt,
+                        character_image_path=char_image_path or original_image,
+                        reference_image_path=char_image_path or original_image,
+                        on_log=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
+                    )
 
                 if v2_res.get("out_of_credits"):
                     msg = v2_res.get("message") or "⚠️ Tài khoản Google Flow đang dùng đã HẾT TÍN DỤNG! Đã lưu phiên làm việc (Cảnh 2) và mở đăng nhập trên Chrome. Sau khi bạn đăng nhập tài khoản mới thành công, hệ thống sẽ TỰ ĐỘNG chạy tiếp Cảnh 2 & ghép video!"

@@ -9,9 +9,10 @@ import {
   Bot, 
   Sparkles, 
   Combine, 
-  Settings,
-  Flame,
-  Wand2
+  Settings, 
+  Flame, 
+  Wand2,
+  Video
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -35,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'prompt_library', label: 'Kho Prompt', icon: BookOpen },
     { id: 'gemini_studio', label: 'Gemini Automation', icon: Bot },
     { id: 'flow_studio', label: 'Google Flow Studio', icon: Sparkles },
+    { id: 'muse_studio', label: 'Muse AI Studio', icon: Video },
     { id: 'stitch_studio', label: 'Ghép video (FFmpeg)', icon: Combine },
     { id: 'settings', label: 'Cài đặt', icon: Settings },
   ];
