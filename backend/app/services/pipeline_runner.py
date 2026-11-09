@@ -1107,6 +1107,11 @@ class PipelineRunner:
             v1_row = await v1_cur.fetchone()
             v1_path = v1_row["video_path"] if v1_row and os.path.exists(v1_row["video_path"]) else None
 
+            if force_regenerate:
+                v1_path = None
+                await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 1", (project_id,))
+                await db.commit()
+
             # Discard stale showcase demo videos (4837882 bytes or 9671950 bytes from old landing page loops)
             if v1_path and os.path.exists(v1_path) and os.path.getsize(v1_path) in [4837882, 9671950]:
                 logger.info("Discarding stale demo showcase video for Scene 1")
@@ -1195,6 +1200,11 @@ class PipelineRunner:
             v2_cur = await db.execute("SELECT * FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
             v2_row = await v2_cur.fetchone()
             v2_path = v2_row["video_path"] if v2_row and os.path.exists(v2_row["video_path"]) else None
+
+            if force_regenerate:
+                v2_path = None
+                await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
+                await db.commit()
 
             # Discard stale showcase demo videos
             if v2_path and os.path.exists(v2_path) and os.path.getsize(v2_path) in [4837882, 9671950]:

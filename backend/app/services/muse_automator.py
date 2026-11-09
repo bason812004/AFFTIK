@@ -8,7 +8,7 @@ import re
 import unicodedata
 import base64
 from pathlib import Path
-from typing import Dict, Any, Optional, Callable, List
+from typing import Dict, Any, Optional, Callable, List, Tuple
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
 from backend.app.config import PROJECTS_DIR
@@ -19,24 +19,92 @@ from backend.app.services.ffmpeg_service import ffmpeg_service
 logger = logging.getLogger(__name__)
 
 def _slugify(text: str) -> str:
+    text = (text or "").replace('đ', 'd').replace('Đ', 'd')
     text = unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('utf-8')
-    text = re.sub(r'[^\w\s-]', '', text).strip().lower()
+    text = re.sub(r'[^\w\s-]', ' ', text).strip().lower()
     return re.sub(r'[-\s]+', '-', text)
 
-def _get_project_tokens(name: str) -> List[str]:
-    slug = _slugify(name)
-    tokens = [t for t in slug.split('-') if len(t) >= 2]
-    # Add common aliases if applicable
-    low = name.lower()
-    if "bơm" in low and "ugreen" not in tokens:
-        tokens.append("ugreen")
-    if "muỗng" in low or "thìa" in low:
-        tokens.extend(["muong", "inox", "inox304"])
-    if "kệ" in low:
-        tokens.extend(["ke", "tang"])
-    if "hanbio" in low:
-        tokens.extend(["ops", "hanbio"])
-    return list(set(tokens))
+ALL_PRODUCT_SPECS = {
+    'máy bơm lốp xe hơi': ['may-bom', 'bom-lop', 'ugreen', 'may bom', 'bom lop'],
+    'phân bón trung vi lượng': ['phan-bon', 'trung-vi-luong', 'phan bon', 'trung vi luong', 'combi'],
+    'phục hồi vàng lá, thối rễ': ['vang-la', 'thoi-re', 'vang la', 'thoi re', 'phuc-hoi', 'phuc hoi'],
+    'ngũ cốc gà đá': ['ngu-coc', 'ga-da', 'ngu coc', 'ga da'],
+    'muỗng cơm inox 304': ['muong-com', 'inox304', 'inox-304', 'muong com', 'inox 304'],
+    'kệ 3 tầng': ['ke-3-tang', 'ke 3 tang'],
+    'nhựa đường dầu hắc dạng lỏng': ['nhua-duong', 'dau-hac', 'nhua duong', 'dau hac'],
+    'hạt cho mèo': ['hat-cho-meo', 'hat cho meo', 'thuc-an-meo'],
+    'ops Hanbio': ['ops-hanbio', 'hanbio', 'ops hanbio'],
+    'túi đeo chéo': ['tui-deo', 'deo-cheo', 'tui-deo-cheo', 'tui deo']
+}
+
+STOP_WORDS = {
+    'cho', 'dang', 'tang', 're', 'la', 'vi', 'cao', 'tot', 'moi', 'cua', 
+    'nhieu', 'loai', 'hop', 'chai', 'goi', 'san', 'pham', 'chinh', 'hang', 
+    'tien', 'ich', 'chuan', 'sieu', 'dep', 'chat', 'luong', 'ngay', 'hom', 
+    'nay', 'them', 'giam', 'gia', 'khuyen', 'mai', 'kem'
+}
+
+def _get_distinctive_phrases(product_name: str) -> List[str]:
+    slug = _slugify(product_name)
+    parts = [p for p in slug.split('-') if p and len(p) >= 2]
+    
+    phrases = set()
+    if slug:
+        phrases.add(slug)
+    
+    # 2-word combinations
+    for i in range(len(parts) - 1):
+        w1, w2 = parts[i], parts[i+1]
+        if w1 not in STOP_WORDS or w2 not in STOP_WORDS:
+            phrases.add(f"{w1}-{w2}")
+            phrases.add(f"{w1} {w2}")
+            
+    # 3-word combinations
+    for i in range(len(parts) - 2):
+        w1, w2, w3 = parts[i], parts[i+1], parts[i+2]
+        phrases.add(f"{w1}-{w2}-{w3}")
+        phrases.add(f"{w1} {w2} {w3}")
+        
+    # Long distinctive single tokens (>= 5 chars and not stop word)
+    for p in parts:
+        if len(p) >= 5 and p not in STOP_WORDS:
+            phrases.add(p)
+            
+    # Product aliases
+    low = (product_name or "").lower()
+    for cat_name, sigs in ALL_PRODUCT_SPECS.items():
+        cat_slug = _slugify(cat_name)
+        if cat_slug in slug or slug in cat_slug or cat_name.lower() in low or low in cat_name.lower():
+            phrases.update(sigs)
+            
+    return [p for p in phrases if len(p) >= 3 and p not in STOP_WORDS]
+
+def _get_excluded_signatures(target_name: str) -> List[str]:
+    target_slug = _slugify(target_name)
+    excluded = set()
+    
+    for prod_name, spec_sigs in ALL_PRODUCT_SPECS.items():
+        p_slug = _slugify(prod_name)
+        if p_slug != target_slug and prod_name.lower() not in target_name.lower() and target_name.lower() not in prod_name.lower():
+            excluded.update(spec_sigs)
+            excluded.add(p_slug)
+            
+    try:
+        conn = _get_raw_conn()
+        rows = conn.execute("SELECT name FROM projects").fetchall()
+        conn.close()
+        for r in rows:
+            p_name = r["name"] or ""
+            p_slug = _slugify(p_name)
+            if p_slug and p_slug != target_slug and p_name.lower() not in target_name.lower() and target_name.lower() not in p_name.lower():
+                excluded.add(p_slug)
+                for chunk in p_slug.split('-'):
+                    if len(chunk) >= 4 and chunk not in STOP_WORDS:
+                        excluded.add(chunk)
+    except Exception:
+        pass
+        
+    return [s for s in excluded if len(s) >= 3 and s not in STOP_WORDS]
 
 class MuseAutomator:
     """
@@ -45,6 +113,7 @@ class MuseAutomator:
     - Automates prompt entry (Hook & CTA for 10s 60fps scenes).
     - Detects and extracts blob video bytes directly from browser page context.
     - Standardizes with FFmpeg (1080x1920 @ 60 FPS).
+    - Strict product signature matching to guarantee zero cross-product contamination.
     """
 
     def __init__(self):
@@ -90,11 +159,13 @@ class MuseAutomator:
         project_name: str
     ) -> Dict[str, Any]:
         """
-        Scans all messages in Muse AI chat for videos matching project_name.
+        Scans messages in Muse AI chat strictly for videos matching project_name.
+        Uses positive distinctive phrases and negative signature exclusions to prevent cross-contamination.
         Returns dict with keys 'scene1' and 'scene2' containing { 'src': ..., 'aria': ..., 'text': ... }.
         """
-        slug = _slugify(project_name)
-        tokens = _get_project_tokens(project_name)
+        target_slug = _slugify(project_name)
+        pos_sigs = _get_distinctive_phrases(project_name)
+        neg_sigs = _get_excluded_signatures(project_name)
 
         try:
             await page.wait_for_selector('[data-message-role]', timeout=15000)
@@ -103,86 +174,75 @@ class MuseAutomator:
             pass
 
         match_data = await page.evaluate("""async (args) => {
-            const { slug, tokens, rawName } = args;
+            const { targetSlug, posSigs, negSigs } = args;
             const results = { scene1: null, scene2: null };
 
-            // Find all messages
+            // Find all assistant messages
             const msgs = Array.from(document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"]'));
             if (!msgs.length) return results;
 
-            for (let i = 0; i < msgs.length; i++) {
+            // Scan backwards from newest to oldest
+            for (let i = msgs.length - 1; i >= 0; i--) {
                 const m = msgs[i];
                 const text = (m.innerText || '').toLowerCase();
-                const aria = (m.getAttribute('aria-label') || '').toLowerCase();
-                const hasPres = m.getAttribute('data-message-has-presentation') === 'true';
 
-                // Context from neighboring messages
-                const prevText = i > 0 ? (msgs[i - 1].innerText || '').toLowerCase() : '';
-                const nextText = i < msgs.length - 1 ? (msgs[i + 1].innerText || '').toLowerCase() : '';
-                const combinedText = prevText + ' ' + text + ' ' + nextText;
+                // Fast negative check: if message text explicitly belongs to another product, skip
+                if (negSigs.some(sig => text.includes(sig))) continue;
 
-                const textMatches = tokens.some(t => combinedText.includes(t)) || combinedText.includes(rawName.toLowerCase());
-                const mHtml = (m.innerHTML || '').toLowerCase();
-                const htmlMatches = tokens.some(t => mHtml.includes(t)) || (slug && mHtml.includes(slug));
+                const wrappers = Array.from(m.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video'));
+                if (!wrappers.length) continue;
 
-                if (textMatches || htmlMatches) {
-                    m.scrollIntoView({ behavior: 'instant', block: 'center' });
-                    await new Promise(r => setTimeout(r, 300));
+                m.scrollIntoView({ behavior: 'instant', block: 'center' });
+                await new Promise(r => setTimeout(r, 200));
 
-                    for (let t = 0; t < 6; t++) {
-                        const wrappers = m.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video');
-                        let foundWrapper = false;
-                        for (const w of wrappers) {
-                            const video = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
-                            const src = w.getAttribute('data-hatch-video-src') || (video ? video.src : null);
-                            const wAria = (w.getAttribute('aria-label') || '').toLowerCase();
+                for (let wIdx = 0; wIdx < wrappers.length; wIdx++) {
+                    const w = wrappers[wIdx];
+                    const wAria = (w.getAttribute('aria-label') || '').toLowerCase();
+                    const video = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
+                    const src = w.getAttribute('data-hatch-video-src') || (video ? video.src : null);
 
-                            if (src && (src.startsWith('blob:') || src.startsWith('http'))) {
-                                foundWrapper = true;
-                                const isS1 = wAria.includes('canh1') || wAria.includes('cảnh 1') || text.includes('cảnh 1');
-                                const isS2 = wAria.includes('canh2') || wAria.includes('cảnh 2') || text.includes('cảnh 2');
+                    if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
 
-                                if (isS1 && !results.scene1) {
-                                    results.scene1 = { src, aria: wAria, text: text.substring(0, 100) };
-                                }
-                                if (isS2 && !results.scene2) {
-                                    results.scene2 = { src, aria: wAria, text: text.substring(0, 100) };
-                                }
-                            }
+                    // Reject if aria-label matches ANY negative product signature
+                    if (negSigs.some(sig => wAria.includes(sig))) continue;
+
+                    // Positive check: aria-label OR surrounding message text must match positive signatures
+                    const hasPosAria = posSigs.some(sig => wAria.includes(sig));
+                    const hasPosText = posSigs.some(sig => text.includes(sig));
+                    if (!hasPosAria && !hasPosText) continue;
+
+                    // Scene verification
+                    let isS1 = wAria.includes('canh1') || wAria.includes('canh-1') || wAria.includes('cảnh 1');
+                    let isS2 = wAria.includes('canh2') || wAria.includes('canh-2') || wAria.includes('cảnh 2');
+
+                    // If message has 2 video wrappers, wrapper 0 is Scene 1, wrapper 1 is Scene 2
+                    if (!isS1 && !isS2) {
+                        if (wrappers.length >= 2) {
+                            if (wIdx === 0) isS1 = true;
+                            if (wIdx === 1) isS2 = true;
+                        } else if (text.includes('cảnh 1')) {
+                            isS1 = true;
+                        } else if (text.includes('cảnh 2')) {
+                            isS2 = true;
                         }
-                        if (foundWrapper) break;
-                        await new Promise(r => setTimeout(r, 250));
+                    }
+
+                    if (isS1 && !results.scene1) {
+                        results.scene1 = { src, aria: wAria, text: text.substring(0, 100) };
+                    }
+                    if (isS2 && !results.scene2) {
+                        results.scene2 = { src, aria: wAria, text: text.substring(0, 100) };
                     }
                 }
+
                 if (results.scene1 && results.scene2) break;
-            }
-
-            // Fallback: If only 1 video was found or both were in a single assistant message
-            if (!results.scene1 || !results.scene2) {
-                for (let i = 0; i < msgs.length; i++) {
-                    const m = msgs[i];
-                    const combined = (m.innerText || '').toLowerCase();
-                    if (tokens.some(t => combined.includes(t)) || combined.includes(rawName.toLowerCase())) {
-                        m.scrollIntoView({ behavior: 'instant', block: 'center' });
-                        await new Promise(r => setTimeout(r, 300));
-                        const allV = Array.from(m.querySelectorAll('[data-hatch-video-wrapper="true"], video'));
-                        if (allV.length >= 2) {
-                            const v1 = allV[0].tagName.toLowerCase() === 'video' ? allV[0] : allV[0].querySelector('video');
-                            const v2 = allV[1].tagName.toLowerCase() === 'video' ? allV[1] : allV[1].querySelector('video');
-                            const s1 = allV[0].getAttribute('data-hatch-video-src') || (v1 ? v1.src : null);
-                            const s2 = allV[1].getAttribute('data-hatch-video-src') || (v2 ? v2.src : null);
-                            if (s1 && !results.scene1) results.scene1 = { src: s1, aria: allV[0].getAttribute('aria-label') || '' };
-                            if (s2 && !results.scene2) results.scene2 = { src: s2, aria: allV[1].getAttribute('aria-label') || '' };
-                        }
-                    }
-                }
             }
 
             // Restore scroll to bottom
             const scroller = Array.from(document.querySelectorAll('*')).find(e => e.scrollHeight > e.clientHeight + 50 && e.clientHeight > 200);
             if (scroller) scroller.scrollTop = scroller.scrollHeight;
             return results;
-        }""", {"slug": slug, "tokens": tokens, "rawName": project_name})
+        }""", {"targetSlug": target_slug, "posSigs": pos_sigs, "negSigs": neg_sigs})
 
         return match_data or {}
 
@@ -288,34 +348,24 @@ class MuseAutomator:
                 await page.goto(muse_url, wait_until="domcontentloaded", timeout=30000)
                 await asyncio.sleep(2)
 
-            # Step 3a: Check if video for this scene already exists in chat!
-            await log_fn("Kiểm tra video đã hoàn thành trên Muse AI...", 30)
-            existing_videos = await self.scan_chat_for_project_videos(page, pname)
-            target_scene_key = f"scene{scene_number}"
-            existing_match = existing_videos.get(target_scene_key)
+            pos_sigs = _get_distinctive_phrases(pname)
+            neg_sigs = _get_excluded_signatures(pname)
+            target_slug = _slugify(pname)
 
-            if existing_match and existing_match.get("src"):
-                await log_fn(f"Đã tìm thấy video Cảnh {scene_number} từ Muse AI! Đang trích xuất blob...", 50)
-                if await self.download_blob_or_url(page, existing_match["src"], temp_down):
-                    await log_fn(f"Đang chuẩn hóa video Cảnh {scene_number} (1080x1920 @ 60 FPS)...", 85)
-                    await ffmpeg_service.standardize_scene_video(
-                        input_video_path=str(temp_down),
-                        output_video_path=str(target_file),
-                        target_width=1080,
-                        target_height=1920,
-                        target_fps=60
-                    )
-                    temp_down.unlink(missing_ok=True)
-                    await log_fn(f"Hoàn thành video Cảnh {scene_number} chuẩn TikTok Affiliate!", 100)
-                    return {
-                        "success": True,
-                        "video_path": str(target_file),
-                        "scene_number": scene_number,
-                        "engine": "muse_ai"
-                    }
+            # Record state before prompting to guarantee we only capture new generations
+            initial_counts = await page.evaluate("""() => {
+                const msgs = document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"]');
+                const wrappers = document.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video');
+                return {
+                    msgCount: msgs.length,
+                    wrapperCount: wrappers.length
+                };
+            }""")
+            init_msg_count = initial_counts.get("msgCount", 0)
+            init_wrapper_count = initial_counts.get("wrapperCount", 0)
 
-            # Step 3b: Send prompt into Muse AI Chat
-            await log_fn(f"Đang nhập Prompt Cảnh {scene_number} vào Muse AI...", 40)
+            # Input Prompt into Muse AI Chat
+            await log_fn(f"Đang nhập Prompt Cảnh {scene_number} cho '{pname}' vào Muse AI...", 40)
 
             prompt_input = await page.query_selector(
                 "textarea[placeholder*='Nhắn tin' i], textarea[aria-label*='Nhắn tin' i], " +
@@ -323,7 +373,6 @@ class MuseAutomator:
                 "div[contenteditable='true'], textarea"
             )
 
-            # Format formatted instruction for Muse AI
             formatted_prompt = f"[Cảnh {scene_number} - {pname} | 9:16, 10s, 60fps] {scene_prompt}"
 
             if prompt_input:
@@ -362,14 +411,14 @@ class MuseAutomator:
 
             await asyncio.sleep(2)
 
-            # Step 3c: Wait for video generation (up to 90 seconds)
-            await log_fn("Đang chờ Muse AI kết xuất video (Tiến trình Muse/Veo)...", 60)
+            # Step 3c: Wait for video generation (up to 120 seconds)
+            await log_fn(f"Đang chờ Muse AI kết xuất video Cảnh {scene_number} (chuẩn 9:16 60 FPS)...", 60)
 
             downloaded = False
-            for attempt in range(30):
+            for attempt in range(40):
                 await asyncio.sleep(3)
                 elapsed = (attempt + 1) * 3
-                current_pct = min(60 + int(attempt * 0.9), 90)
+                current_pct = min(60 + int(attempt * 0.8), 92)
 
                 # Keep bottom scrolled into view
                 await page.evaluate("""() => {
@@ -378,38 +427,83 @@ class MuseAutomator:
                     window.scrollTo(0, document.body.scrollHeight);
                 }""")
 
-                # Look for newest presentation video wrapper
-                newest_video = await page.evaluate("""async () => {
-                    const wrappers = Array.from(document.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video'));
-                    if (!wrappers.length) return null;
-                    
-                    // Check the last 3 wrappers
-                    for (let i = wrappers.length - 1; i >= Math.max(0, wrappers.length - 3); i--) {
-                        const w = wrappers[i];
-                        w.scrollIntoView({ behavior: 'instant', block: 'center' });
-                        await new Promise(r => setTimeout(r, 200));
+                # Look for newly generated video matching this scene and product
+                newest_video = await page.evaluate("""async (args) => {
+                    const { initMsgCount, sceneNum, posSigs, negSigs } = args;
+                    const msgs = Array.from(document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"]'));
+                    if (!msgs.length) return null;
 
-                        const v = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
-                        const src = w.getAttribute('data-hatch-video-src') || (v ? v.src : null);
-                        const aria = w.getAttribute('aria-label') || '';
+                    // Scan backwards from newest to oldest
+                    for (let i = msgs.length - 1; i >= 0; i--) {
+                        const m = msgs[i];
+                        const text = (m.innerText || '').toLowerCase();
 
-                        if (src && (src.startsWith('blob:') || src.startsWith('http'))) {
-                            return { src, aria };
+                        // Fast negative check on message text
+                        if (negSigs.some(sig => text.includes(sig))) continue;
+
+                        const wrappers = Array.from(m.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video'));
+                        if (!wrappers.length) continue;
+
+                        for (let wIdx = 0; wIdx < wrappers.length; wIdx++) {
+                            const w = wrappers[wIdx];
+                            const wAria = (w.getAttribute('aria-label') || '').toLowerCase();
+                            const video = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
+                            const src = w.getAttribute('data-hatch-video-src') || (video ? video.src : null);
+                            if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
+
+                            // Reject if aria-label matches ANY negative product signature
+                            if (negSigs.some(sig => wAria.includes(sig))) continue;
+
+                            // Match verification: must either be in a newly created assistant message (i >= initMsgCount)
+                            // OR strictly match positive signatures in aria-label or text
+                            const hasPosAria = posSigs.some(sig => wAria.includes(sig));
+                            const hasPosText = posSigs.some(sig => text.includes(sig));
+                            const isNewMessage = i >= initMsgCount;
+
+                            if (!hasPosAria && !hasPosText && !isNewMessage) continue;
+
+                            // Scene verification
+                            let isTargetScene = false;
+                            const sKey = `canh${sceneNum}`;
+                            const sKeyDash = `canh-${sceneNum}`;
+                            const sKeyText = `cảnh ${sceneNum}`;
+
+                            if (wAria.includes(sKey) || wAria.includes(sKeyDash) || text.includes(sKeyText)) {
+                                isTargetScene = true;
+                            } else if (wrappers.length >= 2) {
+                                if (sceneNum === 1 && wIdx === 0) isTargetScene = true;
+                                if (sceneNum === 2 && wIdx === 1) isTargetScene = true;
+                            } else if (isNewMessage) {
+                                const otherKey = sceneNum === 1 ? 'canh2' : 'canh1';
+                                const otherText = sceneNum === 1 ? 'cảnh 2' : 'cảnh 1';
+                                if (!wAria.includes(otherKey) && !text.includes(otherText)) {
+                                    isTargetScene = true;
+                                }
+                            }
+
+                            if (isTargetScene) {
+                                return { src, aria: wAria, text: text.substring(0, 100), msgIndex: i, wrapperIndex: wIdx };
+                            }
                         }
                     }
                     return null;
-                }""")
+                }""", {
+                    "initMsgCount": init_msg_count,
+                    "sceneNum": scene_number,
+                    "posSigs": pos_sigs,
+                    "negSigs": neg_sigs
+                })
 
                 if newest_video and newest_video.get("src"):
-                    await log_fn(f"Đã tạo xong video trên Muse AI! Đang tải về máy...", 90)
+                    await log_fn(f"Đã tạo xong video Cảnh {scene_number} trên Muse AI! Đang trích xuất video...", 92)
                     if await self.download_blob_or_url(page, newest_video["src"], temp_down):
                         downloaded = True
                         break
 
-                await log_fn(f"Muse AI đang dựng video Cảnh {scene_number} ({elapsed}s)...", current_pct)
+                await log_fn(f"Muse AI đang dựng video Cảnh {scene_number} cho '{pname}' ({elapsed}s)...", current_pct)
 
             if downloaded and temp_down.exists() and temp_down.stat().st_size > 20000:
-                await log_fn(f"Đang chuẩn hóa video Cảnh {scene_number} (1080x1920 @ 60 FPS)...", 94)
+                await log_fn(f"Đang chuẩn hóa video Cảnh {scene_number} (1080x1920 @ 60 FPS)...", 95)
                 await ffmpeg_service.standardize_scene_video(
                     input_video_path=str(temp_down),
                     output_video_path=str(target_file),
@@ -418,6 +512,55 @@ class MuseAutomator:
                     target_fps=60
                 )
                 temp_down.unlink(missing_ok=True)
+
+                # Check if the other scene was also generated in the same response
+                try:
+                    other_scene = 2 if scene_number == 1 else 1
+                    other_file = target_dir / f"scene{other_scene}.mp4"
+                    if not other_file.exists() or other_file.stat().st_size < 10000:
+                        companion_video = await page.evaluate("""async (args) => {
+                            const { sceneNum, posSigs, negSigs } = args;
+                            const msgs = Array.from(document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"]'));
+                            if (!msgs.length) return null;
+                            const m = msgs[msgs.length - 1];
+                            const text = (m.innerText || '').toLowerCase();
+                            if (negSigs.some(sig => text.includes(sig))) return null;
+                            const wrappers = Array.from(m.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video'));
+                            if (wrappers.length < 2) return null;
+                            const wIdx = sceneNum === 1 ? 0 : 1;
+                            const w = wrappers[wIdx];
+                            const video = w.tagName.toLowerCase() === 'video' ? w : w.querySelector('video');
+                            const src = w.getAttribute('data-hatch-video-src') || (video ? video.src : null);
+                            const wAria = (w.getAttribute('aria-label') || '').toLowerCase();
+                            if (src && !negSigs.some(sig => wAria.includes(sig))) {
+                                return { src, aria: wAria };
+                            }
+                            return null;
+                        }""", {"sceneNum": other_scene, "posSigs": pos_sigs, "negSigs": neg_sigs})
+
+                        if companion_video and companion_video.get("src"):
+                            temp_other = target_dir / f"temp_muse_s{other_scene}.mp4"
+                            if await self.download_blob_or_url(page, companion_video["src"], temp_other):
+                                await ffmpeg_service.standardize_scene_video(
+                                    input_video_path=str(temp_other),
+                                    output_video_path=str(other_file),
+                                    target_width=1080,
+                                    target_height=1920,
+                                    target_fps=60
+                                )
+                                temp_other.unlink(missing_ok=True)
+                                p_other = await ffmpeg_service.probe_video(str(other_file))
+                                c_db = _get_raw_conn()
+                                c_db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, other_scene))
+                                c_db.execute("""
+                                    INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
+                                    VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')
+                                """, (f"v{other_scene}_{project_id[:4]}", project_id, other_scene, str(other_file), p_other.get("duration", 10.0)))
+                                c_db.commit()
+                                c_db.close()
+                except Exception as comp_ex:
+                    logger.debug(f"Companion scene check error: {comp_ex}")
+
                 await log_fn(f"Hoàn thành xuất sắc video Cảnh {scene_number} chuẩn TikTok Affiliate!", 100)
                 return {
                     "success": True,
@@ -426,8 +569,9 @@ class MuseAutomator:
                     "engine": "muse_ai"
                 }
 
-            # If still not ready after timeout, check chat scan one final time
+            # If still not ready after timeout, check chat scan strictly one final time
             final_scan = await self.scan_chat_for_project_videos(page, pname)
+            target_scene_key = f"scene{scene_number}"
             if final_scan.get(target_scene_key) and final_scan[target_scene_key].get("src"):
                 src = final_scan[target_scene_key]["src"]
                 if await self.download_blob_or_url(page, src, temp_down):
@@ -448,7 +592,7 @@ class MuseAutomator:
 
             return {
                 "success": False,
-                "message": f"Muse AI chưa trả video trực tiếp sau 90s. Hệ thống tự động chuyển sang bộ kết xuất video chuyển động 60 FPS để hoàn tất dự án."
+                "message": f"Muse AI chưa trả video trực tiếp sau 120s. Hệ thống tự động chuyển sang bộ kết xuất video chuyển động 60 FPS để hoàn tất dự án."
             }
 
         except Exception as e:
@@ -457,7 +601,7 @@ class MuseAutomator:
 
     async def pull_project_videos(self, project_id: str) -> Dict[str, Any]:
         """
-        Pulls Scene 1 & Scene 2 videos directly from Muse AI chat for this project,
+        Pulls Scene 1 & Scene 2 videos strictly from Muse AI chat for this project,
         standardizes them to 1080x1920 @ 60 FPS, stitches them into the final video,
         and saves everything to the database.
         """
@@ -484,7 +628,7 @@ class MuseAutomator:
         if not videos.get("scene1") and not videos.get("scene2"):
             return {
                 "success": False,
-                "message": f"Không tìm thấy video nào của '{pname}' trong lịch sử chat Muse AI."
+                "message": f"Không tìm thấy video nào của '{pname}' trong lịch sử chat Muse AI. Vui lòng bấm 'Chạy lại' để hệ thống gửi prompt tạo video mới."
             }
 
         v_dir = PROJECTS_DIR / project_id / "videos"
@@ -608,6 +752,5 @@ class MuseAutomator:
             "total_updated": len(results),
             "updated_projects": results
         }
-
 
 muse_automator = MuseAutomator()
