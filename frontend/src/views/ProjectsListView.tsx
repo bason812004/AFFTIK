@@ -217,7 +217,7 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
     window.open(`/api/projects/${id}/export-zip`, '_blank');
   };
 
-  const activeRunId = sessionState?.running_project_id || sessionState?.batch_state?.current_project_id;
+  const activeRunId = sessionState?.running_project_id || null;
   const globalPaused = Boolean(sessionState?.batch_state?.paused_by_user);
 
   const classifyProject = (p: Project): 'running' | 'paused' | 'completed' => {

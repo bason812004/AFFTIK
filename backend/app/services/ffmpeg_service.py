@@ -10,24 +10,37 @@ from backend.app.config import FFMPEG_PATH
 class FFmpegService:
     def __init__(self, ffmpeg_bin: str = FFMPEG_PATH):
         self.ffmpeg_bin = ffmpeg_bin
+        self._cached_installed: Optional[bool] = None
+        self._cached_version: Optional[str] = None
 
     def check_installed(self) -> bool:
+        if self._cached_installed is not None:
+            return self._cached_installed
         if not self.ffmpeg_bin:
+            self._cached_installed = False
             return False
         if os.path.isabs(self.ffmpeg_bin) and os.path.isfile(self.ffmpeg_bin):
+            self._cached_installed = True
             return True
-        return shutil.which(self.ffmpeg_bin) is not None
+        self._cached_installed = shutil.which(self.ffmpeg_bin) is not None
+        return self._cached_installed
 
     def _sync_get_version(self) -> str:
+        if self._cached_version is not None:
+            return self._cached_version
         if not self.check_installed():
-            return "Chưa cài đặt"
+            self._cached_version = "Chưa cài đặt"
+            return self._cached_version
         try:
-            res = subprocess.run([self.ffmpeg_bin, "-version"], capture_output=True, text=True, timeout=10)
-            return res.stdout.splitlines()[0]
+            res = subprocess.run([self.ffmpeg_bin, "-version"], capture_output=True, text=True, timeout=5)
+            self._cached_version = res.stdout.splitlines()[0] if res.stdout else "FFmpeg Ready"
+            return self._cached_version
         except Exception as e:
             return f"Lỗi: {str(e)}"
 
     async def get_version(self) -> str:
+        if self._cached_version is not None:
+            return self._cached_version
         return await asyncio.to_thread(self._sync_get_version)
 
     def _sync_probe_video(self, video_path: str) -> Dict[str, Any]:

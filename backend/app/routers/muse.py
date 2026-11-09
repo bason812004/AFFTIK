@@ -91,3 +91,4 @@ async def delete_scene_video(project_id: str, scene_number: int):
         target_path.unlink(missing_ok=True)
         return {"success": True, "deleted": True, "message": f"Đã xóa video Cảnh {scene_number}"}
     return {"success": True, "deleted": False, "message": "Video không tồn tại"}
+

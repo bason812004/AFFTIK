@@ -200,3 +200,4 @@ export const MuseStudioView: React.FC<MuseStudioViewProps> = ({
     </div>
   );
 };
+

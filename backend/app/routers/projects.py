@@ -59,7 +59,7 @@ async def list_projects(db = Depends(get_db)):
             SELECT status, step_name, progress_percent, message
             FROM automation_tasks
             WHERE project_id = ? AND task_type = 'full_pipeline'
-            ORDER BY updated_at DESC LIMIT 1
+            ORDER BY updated_at DESC, rowid DESC LIMIT 1
         """, (pid,))
         t_row = await t_cursor.fetchone()
 
@@ -425,7 +425,7 @@ async def get_session_and_batch_state(db = Depends(get_db)):
                 SELECT status, step_name, progress_percent, message
                 FROM automation_tasks
                 WHERE project_id = ?
-                ORDER BY updated_at DESC LIMIT 1
+                ORDER BY updated_at DESC, rowid DESC LIMIT 1
             """, (pid,))
             t_row = await t_cur.fetchone()
             if t_row:

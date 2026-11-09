@@ -111,8 +111,8 @@ class MuseAutomator:
         login_st = await browser_manager.check_muse_login(muse_url, force_open=False)
         if not login_st.get("logged_in"):
             await log_fn("Chưa đăng nhập Muse AI! Vui lòng đăng nhập trên cửa sổ Chrome...", 15)
-            # Open headed Chrome to allow one-click login
-            await browser_manager.get_muse_page(headed=True, force_headed=True)
+            # Open headed Chrome to login page
+            await browser_manager.check_muse_login(muse_url, force_open=True)
             return {
                 "success": False,
                 "needs_login": True,

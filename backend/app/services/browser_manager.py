@@ -1,4 +1,5 @@
 import os
+import time
 import shutil
 import logging
 import asyncio
@@ -25,17 +26,17 @@ def _clean_profile_locks(profile_dir: Path):
 
 
 def _kill_orphaned_chrome_for_profile(profile_dir: Path):
-    """Kills any orphaned background chrome processes holding this profile's lockfile."""
+    """Kills any orphaned background chrome processes holding this profile's lockfile (fast filter by name first)."""
     try:
         import psutil
         safe_p = str(profile_dir.resolve()).lower()
-        for p in psutil.process_iter(['pid', 'name', 'cmdline']):
+        for p in psutil.process_iter(['pid', 'name']):
             try:
-                if p.info['name'] and p.info['name'].lower() == 'chrome.exe':
-                    cmdline = " ".join(p.info['cmdline'] or []).lower()
+                if (p.info.get('name') or '').lower() == 'chrome.exe':
+                    cmdline = " ".join(p.cmdline() or []).lower()
                     if safe_p in cmdline:
                         p.kill()
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
                 pass
     except Exception:
         pass
@@ -103,16 +104,48 @@ class BrowserManager:
         self._gemini_switching: bool = False
         self._flow_switching: bool = False
         self._muse_switching: bool = False
-        self._lock: Optional[asyncio.Lock] = None
+        self._gemini_switch_ts: float = 0.0
+        self._flow_switch_ts: float = 0.0
+        self._muse_switch_ts: float = 0.0
+        self._pw_lock: Optional[asyncio.Lock] = None
+        self._gemini_lock: Optional[asyncio.Lock] = None
+        self._flow_lock: Optional[asyncio.Lock] = None
+        self._muse_lock: Optional[asyncio.Lock] = None
 
-    def _get_lock(self) -> asyncio.Lock:
-        if self._lock is None:
-            self._lock = asyncio.Lock()
-        return self._lock
+    def _get_pw_lock(self) -> asyncio.Lock:
+        if self._pw_lock is None:
+            self._pw_lock = asyncio.Lock()
+        return self._pw_lock
+
+    def _get_gemini_lock(self) -> asyncio.Lock:
+        if self._gemini_lock is None:
+            self._gemini_lock = asyncio.Lock()
+        return self._gemini_lock
+
+    def _get_flow_lock(self) -> asyncio.Lock:
+        if self._flow_lock is None:
+            self._flow_lock = asyncio.Lock()
+        return self._flow_lock
+
+    def _get_muse_lock(self) -> asyncio.Lock:
+        if self._muse_lock is None:
+            self._muse_lock = asyncio.Lock()
+        return self._muse_lock
 
     async def _ensure_playwright(self):
-        if not self.playwright:
-            self.playwright = await async_playwright().start()
+        async with self._get_pw_lock():
+            if not self.playwright:
+                self.playwright = await async_playwright().start()
+
+    async def _navigate_fast(self, page: Page, url: str):
+        """Navigates quickly using commit wait_until so UI never blocks waiting for heavy SPA assets."""
+        try:
+            await page.goto(url, wait_until="commit", timeout=10000)
+        except Exception:
+            try:
+                await page.evaluate(f"window.location.href = {repr(url)}")
+            except Exception:
+                pass
 
     def _pick_usable_page(self, context: BrowserContext) -> Optional[Page]:
         for pg in context.pages:
@@ -127,7 +160,7 @@ class BrowserManager:
         By default, runs 100% headless in background without opening any desktop windows or taskbar icons.
         force_headed=True is used ONLY when the user clicks 'Đăng nhập Google' to interact.
         """
-        async with self._get_lock():
+        async with self._get_gemini_lock():
             await self._ensure_playwright()
 
             is_headless = not force_headed and not headed
@@ -135,7 +168,6 @@ class BrowserManager:
             if self.gemini_context and self.gemini_page and not self.gemini_page.is_closed():
                 try:
                     await self.gemini_page.title()
-                    # If user requested interactive headed login but current context is headless, reopen
                     if force_headed and self._gemini_headless:
                         await self.close_gemini_browser()
                     else:
@@ -172,13 +204,12 @@ class BrowserManager:
                     if attempt < 2:
                         _clean_profile_locks(GEMINI_PROFILE_DIR)
                         if "ProcessSingleton" in str(e):
-                            _kill_orphaned_chrome_for_profile(GEMINI_PROFILE_DIR)
-                        await asyncio.sleep(1.2)
+                            await asyncio.to_thread(_kill_orphaned_chrome_for_profile, GEMINI_PROFILE_DIR)
+                        await asyncio.sleep(0.5)
                     else:
                         raise e
 
             self._gemini_headless = is_headless
-            pages = self.gemini_context.pages
             self.gemini_page = self._pick_usable_page(self.gemini_context) or await self.gemini_context.new_page()
 
             await self.gemini_page.add_init_script("""
@@ -193,7 +224,7 @@ class BrowserManager:
         By default, runs 100% headless in background without opening any desktop windows or taskbar icons.
         force_headed=True is used ONLY when the user clicks 'Đăng nhập Google' to interact.
         """
-        async with self._get_lock():
+        async with self._get_flow_lock():
             await self._ensure_playwright()
 
             is_headless = not force_headed and not headed
@@ -237,8 +268,8 @@ class BrowserManager:
                     if attempt < 2:
                         _clean_profile_locks(FLOW_PROFILE_DIR)
                         if "ProcessSingleton" in str(e):
-                            _kill_orphaned_chrome_for_profile(FLOW_PROFILE_DIR)
-                        await asyncio.sleep(1.2)
+                            await asyncio.to_thread(_kill_orphaned_chrome_for_profile, FLOW_PROFILE_DIR)
+                        await asyncio.sleep(0.5)
                     else:
                         raise e
 
@@ -257,7 +288,7 @@ class BrowserManager:
         By default, runs headless in background.
         force_headed=True is used when the user clicks 'Đăng nhập Muse AI' to interact.
         """
-        async with self._get_lock():
+        async with self._get_muse_lock():
             await self._ensure_playwright()
 
             is_headless = not force_headed and not headed
@@ -301,8 +332,8 @@ class BrowserManager:
                     if attempt < 2:
                         _clean_profile_locks(MUSE_PROFILE_DIR)
                         if "ProcessSingleton" in str(e):
-                            _kill_orphaned_chrome_for_profile(MUSE_PROFILE_DIR)
-                        await asyncio.sleep(1.2)
+                            await asyncio.to_thread(_kill_orphaned_chrome_for_profile, MUSE_PROFILE_DIR)
+                        await asyncio.sleep(0.5)
                     else:
                         raise e
 
@@ -524,11 +555,18 @@ class BrowserManager:
 
         if not force_open:
             if self._gemini_switching:
+                elapsed = time.time() - self._gemini_switch_ts
+                if (not self.gemini_page or self.gemini_page.is_closed()) and elapsed > 5.0:
+                    self._gemini_switching = False
+                elif elapsed > 60.0:
+                    self._gemini_switching = False
+
+            if self._gemini_switching:
                 if not self.gemini_page or self.gemini_page.is_closed():
                     return {
                         "logged_in": False,
                         "status": "switching_account",
-                        "message": "Đang mở cửa sổ Chrome đăng nhập tài khoản Gemini mới. Vui lòng hoàn thành đăng nhập trên cửa sổ Chrome.",
+                        "message": "Đang mở cửa sổ Chrome đăng nhập tài khoản Gemini mới...",
                         **empty_acct
                     }
                 try:
@@ -613,14 +651,30 @@ class BrowserManager:
 
         # force_open=True: user explicitly clicked 'Đăng nhập' or 'Kết nối'
         try:
+            self._gemini_switching = False
             page = await self.get_gemini_page(headed=True, force_headed=True)
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
             current_url = (page.url or "").lower()
-            if "gemini.google.com" not in current_url:
-                await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(2)
 
-            is_logged_in = await self._is_gemini_page_authenticated(page)
-            if is_logged_in:
+            if saved_login == "true":
+                if "gemini.google.com" not in current_url:
+                    await self._navigate_fast(page, target_url)
+                    await asyncio.sleep(0.8)
+                is_logged_in = await self._is_gemini_page_authenticated(page)
+                if is_logged_in:
+                    set_setting("gemini_logged_in", "true")
+                    acct = await self._extract_account_info(GEMINI_PROFILE_DIR, page, "gemini")
+                    return {
+                        "logged_in": True,
+                        "status": "connected",
+                        "message": f"Đã kết nối Gemini ({acct['account_display']})" if acct["account_display"] else "Đã kết nối Gemini.",
+                        **acct
+                    }
+
+            if "gemini.google.com" in current_url and await self._is_gemini_page_authenticated(page):
                 set_setting("gemini_logged_in", "true")
                 acct = await self._extract_account_info(GEMINI_PROFILE_DIR, page, "gemini")
                 return {
@@ -632,7 +686,8 @@ class BrowserManager:
 
             set_setting("gemini_logged_in", "false")
             chooser_url = f"https://accounts.google.com/ServiceLogin?continue={target_url}&hl=vi"
-            await page.goto(chooser_url, wait_until="domcontentloaded", timeout=30000)
+            if "accounts.google.com" not in current_url:
+                await self._navigate_fast(page, chooser_url)
             return {
                 "logged_in": False,
                 "status": "needs_login",
@@ -699,11 +754,18 @@ class BrowserManager:
         saved_login = get_setting("flow_logged_in")
         if not force_open:
             if self._flow_switching:
+                elapsed = time.time() - self._flow_switch_ts
+                if (not self.flow_page or self.flow_page.is_closed()) and elapsed > 5.0:
+                    self._flow_switching = False
+                elif elapsed > 60.0:
+                    self._flow_switching = False
+
+            if self._flow_switching:
                 if not self.flow_page or self.flow_page.is_closed():
                     return {
                         "logged_in": False,
                         "status": "switching_account",
-                        "message": "Đang mở cửa sổ Chrome đăng nhập tài khoản Flow mới. Vui lòng hoàn thành đăng nhập trên cửa sổ Chrome.",
+                        "message": "Đang mở cửa sổ Chrome đăng nhập tài khoản Flow mới...",
                         **empty_acct
                     }
                 try:
@@ -787,14 +849,30 @@ class BrowserManager:
 
         # force_open=True: user explicitly wants to interact and log in
         try:
+            self._flow_switching = False
             page = await self.get_flow_page(headed=True, force_headed=True)
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
             current_url = (page.url or "").lower()
-            if "flow.google.com" not in current_url and "labs.google" not in current_url:
-                await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(2)
 
-            is_logged_in = await self._is_flow_page_authenticated(page)
-            if is_logged_in:
+            if saved_login == "true":
+                if "flow.google.com" not in current_url and "labs.google" not in current_url:
+                    await self._navigate_fast(page, target_url)
+                    await asyncio.sleep(0.8)
+                is_logged_in = await self._is_flow_page_authenticated(page)
+                if is_logged_in:
+                    set_setting("flow_logged_in", "true")
+                    acct = await self._extract_account_info(FLOW_PROFILE_DIR, page, "flow")
+                    return {
+                        "logged_in": True,
+                        "status": "connected",
+                        "message": f"Đã kết nối Google Flow: {acct['account_display']}" if acct["account_display"] else "Đã kết nối Google Flow.",
+                        **acct
+                    }
+
+            if ("flow.google.com" in current_url or "labs.google" in current_url) and await self._is_flow_page_authenticated(page):
                 set_setting("flow_logged_in", "true")
                 acct = await self._extract_account_info(FLOW_PROFILE_DIR, page, "flow")
                 return {
@@ -806,7 +884,8 @@ class BrowserManager:
 
             set_setting("flow_logged_in", "false")
             chooser_url = f"https://accounts.google.com/ServiceLogin?continue={target_url}&hl=vi"
-            await page.goto(chooser_url, wait_until="domcontentloaded", timeout=30000)
+            if "accounts.google.com" not in current_url:
+                await self._navigate_fast(page, chooser_url)
             return {
                 "logged_in": False,
                 "status": "needs_login",
@@ -829,7 +908,7 @@ class BrowserManager:
             pass
         self.gemini_page = None
         self.gemini_context = None
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.2)
         _clean_profile_locks(GEMINI_PROFILE_DIR)
 
     async def close_flow_browser(self):
@@ -840,53 +919,57 @@ class BrowserManager:
             pass
         self.flow_page = None
         self.flow_context = None
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.2)
         _clean_profile_locks(FLOW_PROFILE_DIR)
 
     async def clear_gemini_session(self, open_login: bool = True, full_logout: bool = True):
         self._gemini_switching = True
+        self._gemini_switch_ts = time.time()
         set_setting("gemini_logged_in", "logged_out")
         self._clear_saved_account_info("gemini")
         await self.close_gemini_browser()
-        _kill_orphaned_chrome_for_profile(GEMINI_PROFILE_DIR)
+        await asyncio.to_thread(_kill_orphaned_chrome_for_profile, GEMINI_PROFILE_DIR)
         _clean_profile_locks(GEMINI_PROFILE_DIR)
         if full_logout:
-            _clean_profile_session(GEMINI_PROFILE_DIR)
+            await asyncio.to_thread(_clean_profile_session, GEMINI_PROFILE_DIR)
 
         if open_login:
             page = await self.get_gemini_page(headed=True, force_headed=True)
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
             login_url = (
                 "https://accounts.google.com/ServiceLogin?continue=https://gemini.google.com/app&hl=vi"
                 if full_logout
                 else "https://accounts.google.com/AccountChooser?continue=https://gemini.google.com/app&hl=vi"
             )
-            try:
-                await page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
-            except Exception:
-                pass
+            await self._navigate_fast(page, login_url)
         return True
 
     async def clear_flow_session(self, open_login: bool = True, full_logout: bool = True):
         self._flow_switching = True
+        self._flow_switch_ts = time.time()
         set_setting("flow_logged_in", "logged_out")
         self._clear_saved_account_info("flow")
         await self.close_flow_browser()
-        _kill_orphaned_chrome_for_profile(FLOW_PROFILE_DIR)
+        await asyncio.to_thread(_kill_orphaned_chrome_for_profile, FLOW_PROFILE_DIR)
         _clean_profile_locks(FLOW_PROFILE_DIR)
         if full_logout:
-            _clean_profile_session(FLOW_PROFILE_DIR)
+            await asyncio.to_thread(_clean_profile_session, FLOW_PROFILE_DIR)
 
         if open_login:
             page = await self.get_flow_page(headed=True, force_headed=True)
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
             login_url = (
                 "https://accounts.google.com/ServiceLogin?continue=https://flow.google.com/&hl=vi"
                 if full_logout
                 else "https://accounts.google.com/AccountChooser?continue=https://flow.google.com/&hl=vi"
             )
-            try:
-                await page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
-            except Exception:
-                pass
+            await self._navigate_fast(page, login_url)
         return True
 
     async def _is_muse_page_authenticated(self, page: Page) -> bool:
@@ -937,11 +1020,18 @@ class BrowserManager:
         saved_login = get_setting("muse_logged_in")
         if not force_open:
             if self._muse_switching:
+                elapsed = time.time() - self._muse_switch_ts
+                if (not self.muse_page or self.muse_page.is_closed()) and elapsed > 5.0:
+                    self._muse_switching = False
+                elif elapsed > 60.0:
+                    self._muse_switching = False
+
+            if self._muse_switching:
                 if not self.muse_page or self.muse_page.is_closed():
                     return {
                         "logged_in": False,
                         "status": "switching_account",
-                        "message": "Đang mở cửa sổ Chrome đăng nhập tài khoản Muse AI mới. Vui lòng đăng nhập trên cửa sổ Chrome.",
+                        "message": "Đang mở cửa sổ Chrome đăng nhập tài khoản Muse AI mới...",
                         **empty_acct
                     }
                 try:
@@ -1023,14 +1113,30 @@ class BrowserManager:
 
         # force_open=True: user explicitly clicked 'Đăng nhập'
         try:
+            self._muse_switching = False
             page = await self.get_muse_page(headed=True, force_headed=True)
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
             current_url = (page.url or "").lower()
-            if "muse.ai" not in current_url and "musevideo.ai" not in current_url:
-                await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(2)
 
-            is_logged_in = await self._is_muse_page_authenticated(page)
-            if is_logged_in:
+            if saved_login == "true":
+                if "muse.ai" not in current_url and "musevideo.ai" not in current_url:
+                    await self._navigate_fast(page, target_url)
+                    await asyncio.sleep(0.8)
+                is_logged_in = await self._is_muse_page_authenticated(page)
+                if is_logged_in:
+                    set_setting("muse_logged_in", "true")
+                    acct = await self._extract_account_info(MUSE_PROFILE_DIR, page, "muse")
+                    return {
+                        "logged_in": True,
+                        "status": "connected",
+                        "message": f"Đã kết nối Muse AI: {acct['account_display']}" if acct["account_display"] else "Đã kết nối Muse AI.",
+                        **acct
+                    }
+
+            if ("muse.ai" in current_url or "musevideo.ai" in current_url) and await self._is_muse_page_authenticated(page):
                 set_setting("muse_logged_in", "true")
                 acct = await self._extract_account_info(MUSE_PROFILE_DIR, page, "muse")
                 return {
@@ -1042,7 +1148,8 @@ class BrowserManager:
 
             set_setting("muse_logged_in", "false")
             login_url = "https://muse.ai/login"
-            await page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
+            if "/login" not in current_url:
+                await self._navigate_fast(page, login_url)
             return {
                 "logged_in": False,
                 "status": "needs_login",
@@ -1065,26 +1172,28 @@ class BrowserManager:
             pass
         self.muse_page = None
         self.muse_context = None
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.2)
         _clean_profile_locks(MUSE_PROFILE_DIR)
 
     async def clear_muse_session(self, open_login: bool = True, full_logout: bool = True):
         self._muse_switching = True
+        self._muse_switch_ts = time.time()
         set_setting("muse_logged_in", "logged_out")
         self._clear_saved_account_info("muse")
         await self.close_muse_browser()
-        _kill_orphaned_chrome_for_profile(MUSE_PROFILE_DIR)
+        await asyncio.to_thread(_kill_orphaned_chrome_for_profile, MUSE_PROFILE_DIR)
         _clean_profile_locks(MUSE_PROFILE_DIR)
         if full_logout:
-            _clean_profile_session(MUSE_PROFILE_DIR)
+            await asyncio.to_thread(_clean_profile_session, MUSE_PROFILE_DIR)
 
         if open_login:
             page = await self.get_muse_page(headed=True, force_headed=True)
-            login_url = "https://muse.ai/login"
             try:
-                await page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
+                await page.bring_to_front()
             except Exception:
                 pass
+            login_url = "https://muse.ai/login"
+            await self._navigate_fast(page, login_url)
         return True
 
     async def close_all(self):

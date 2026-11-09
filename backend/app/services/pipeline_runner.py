@@ -628,9 +628,15 @@ class PipelineRunner:
 
             if res.get("out_of_credits") or res.get("needs_login"):
                 state["paused_for_login"] = True
+                state["current_project_id"] = None
                 self.save_batch_state(state)
-                logger.info(f"Batch queue paused on project {next_pid} waiting for Flow account switch.")
+                logger.info(f"Batch queue paused on project {next_pid} waiting for account switch/login.")
                 self.start_account_switch_watcher()
+                return
+
+            if res.get("waiting_confirm"):
+                state["current_project_id"] = None
+                self.save_batch_state(state)
                 return
 
             if res.get("needs_product_name"):
@@ -654,8 +660,8 @@ class PipelineRunner:
 
     def start_account_switch_watcher(self):
         """
-        Starts a background watcher that monitors the Google Flow browser window.
-        As soon as the user finishes logging into a new Google account on Flow,
+        Starts a background watcher that monitors the browser windows.
+        As soon as the user finishes logging into a new account,
         it automatically resumes the paused project and batch queue!
         """
         try:
@@ -668,7 +674,7 @@ class PipelineRunner:
 
     async def _watch_and_auto_resume(self):
         from backend.app.services.browser_manager import browser_manager
-        logger.info("[Session Watcher] Started watching for Google Flow account login to auto-resume work...")
+        logger.info("[Session Watcher] Started watching for account login to auto-resume work...")
         for _ in range(300):  # Watch up to 20 minutes (300 * 4s)
             await asyncio.sleep(4)
             paused = self.get_paused_session()
@@ -678,19 +684,27 @@ class PipelineRunner:
             if time.time() - float(paused.get("paused_at", 0)) < 8.0:
                 continue
             try:
-                page = browser_manager.flow_page
-                if page and not page.is_closed():
-                    is_auth = await browser_manager._is_flow_page_authenticated(page)
-                    if is_auth:
-                        logger.info(f"[Session Watcher] Detected successful Flow login! Auto-resuming project {paused.get('project_id')}...")
-                        await self.resume_paused_session()
-                        return
+                video_engine = get_setting("video_engine", "muse")
+                if video_engine == "muse":
+                    mpage = browser_manager.muse_page
+                    if mpage and not mpage.is_closed():
+                        if await browser_manager._is_muse_page_authenticated(mpage):
+                            logger.info(f"[Session Watcher] Detected successful Muse AI login! Auto-resuming project {paused.get('project_id')}...")
+                            await self.resume_paused_session()
+                            return
+                else:
+                    fpage = browser_manager.flow_page
+                    if fpage and not fpage.is_closed():
+                        if await browser_manager._is_flow_page_authenticated(fpage):
+                            logger.info(f"[Session Watcher] Detected successful Flow login! Auto-resuming project {paused.get('project_id')}...")
+                            await self.resume_paused_session()
+                            return
             except Exception:
                 pass
 
     async def resume_paused_session(self, manual_project_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Resumes the unfinished work immediately after switching Google Flow accounts.
+        Resumes the unfinished work immediately after switching accounts.
         """
         async with self._resuming_lock:
             paused = self.get_paused_session()
@@ -745,6 +759,10 @@ class PipelineRunner:
         def _sync_update_task(s_name: str, pct: int, s_msg: str, s_status: str):
             try:
                 raw_c = _get_raw_conn()
+                raw_c.execute(
+                    "DELETE FROM automation_tasks WHERE project_id = ? AND task_type = 'full_pipeline' AND id != ?",
+                    (project_id, task_id)
+                )
                 raw_c.execute("""
                     INSERT INTO automation_tasks (id, project_id, task_type, status, step_name, progress_percent, message, updated_at)
                     VALUES (?, ?, 'full_pipeline', ?, ?, ?, ?, CURRENT_TIMESTAMP)

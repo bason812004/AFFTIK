@@ -235,7 +235,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 completed: { label: 'Đã hoàn thành video', color: 'bg-emerald-500/20 text-emerald-300' }
               };
               const sInfo = statusMap[p.status] || { label: p.status, color: 'bg-slate-500/20 text-slate-300' };
-              const activeRunId = sessionState?.running_project_id || sessionState?.batch_state?.current_project_id;
+              const activeRunId = sessionState?.running_project_id || null;
               const batchItem = (sessionState?.batch_projects || []).find((bp: any) => bp.id === p.id);
               const isCompleted = Boolean(p.has_export || p.status === 'completed');
               const isPaused = Boolean(p.is_paused || batchItem?.task_status === 'paused' || p.task_status === 'paused');

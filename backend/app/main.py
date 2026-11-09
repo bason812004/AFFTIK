@@ -25,16 +25,47 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize SQLite DB and seed default prompts
     init_db()
     try:
+        from backend.app.database import _get_raw_conn, get_setting
         from backend.app.services.pipeline_runner import pipeline_runner
+
+        # Clean up any tasks left in 'running' state from an interrupted previous process
+        conn = _get_raw_conn()
+        conn.execute("""
+            UPDATE automation_tasks
+            SET status = 'paused',
+                step_name = 'Đã tạm dừng (Chờ chạy tiếp)',
+                message = 'Bấm Tiếp tục ngoài thẻ dự án hoặc đăng nhập tài khoản để chạy tiếp.'
+            WHERE status = 'running' AND step_name NOT LIKE 'Đang chờ tới lượt%'
+        """)
+        conn.commit()
+        conn.close()
+
         state = pipeline_runner.get_batch_state()
-        if state.get("active") and not state.get("paused_by_user"):
+        if state.get("current_project_id") and not pipeline_runner.current_running_project_id:
+            state["current_project_id"] = None
+            pipeline_runner.save_batch_state(state)
+
+        # Only auto-start batch worker if accounts are already logged in and not paused
+        gemini_ok = get_setting("gemini_logged_in") == "true"
+        if state.get("active") and not state.get("paused_by_user") and not state.get("paused_for_login") and gemini_ok:
             pipeline_runner.start_batch_worker()
     except Exception:
         pass
     yield
-    # Shutdown: Cleanly close any open Playwright browser instances
+    # Shutdown: Cancel background tasks and cleanly close Playwright browser instances
+    try:
+        from backend.app.services.pipeline_runner import pipeline_runner
+        if pipeline_runner._batch_task and not pipeline_runner._batch_task.done():
+            pipeline_runner._batch_task.cancel()
+        if pipeline_runner._watcher_task and not pipeline_runner._watcher_task.done():
+            pipeline_runner._watcher_task.cancel()
+    except Exception:
+        pass
     if browser_manager.playwright is not None:
-        await browser_manager.close_all()
+        try:
+            await asyncio.wait_for(browser_manager.close_all(), timeout=3.0)
+        except Exception:
+            pass
 
 app = FastAPI(
     title="TikTok Affiliate AI Studio PRO",
