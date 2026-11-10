@@ -67,13 +67,41 @@ def sanitize_tiktok_dialogue(text: str) -> str:
         (r'\bchuyển khoản ngoài\b', 'đặt hàng trên giỏ hàng'),
         (r'\bchuyển khoản\b', 'thanh toán qua giỏ hàng'),
         (r'\bhotline\b', 'hỗ trợ trên giỏ hàng'),
-        (r'\bsố điện thoại\b', 'giỏ hàng')
+        (r'\bsố điện thoại\b', 'giỏ hàng'),
+
+        # UI artifact & OCR noise removal (phone screen overlays, buttons, gibberish)
+        (r'\b[qQ]?\s*t[iì]m\s+s[aả]n\s+ph[ẩả]m[^\.\,\!\?]*', ''),
+        (r'\bt[iì]m\s+ki[eế]m[^\.\,\!\?]*', ''),
+        (r'\btddng\s*tv\b', ''),
+        (r'\b\d+\s*dubng\b', ''),
+        (r'\bquanh\s+vi[eế][\w]*\b', 'viền'),
+        (r'\bđã\s+bán[^\.\,\!\?]*', ''),
+        (r'\blượt\s+bán[^\.\,\!\?]*', ''),
+        (r'\bđánh\s+giá[^\.\,\!\?]*', ''),
+        (r'\báp\s+mã[^\.\,\!\?]*', ''),
+        (r'\bvoucher[^\.\,\!\?]*', ''),
+        (r'\bthêm\s+vào\s+giỏ\s+hàng\b', 'bấm vào giỏ hàng'),
+        (r'\bmua\s+ngay\b', 'chốt đơn ngay')
     ]
     
     res = text
     for pattern, rep in replacements:
         res = re.sub(pattern, rep, res, flags=re.IGNORECASE)
+
+    # Filter out corrupted non-Vietnamese OCR words (with characters like ä, ö, ë, å, ø)
+    clean_words = []
+    for w in res.split():
+        w_low = w.lower()
+        if any(c in w_low for c in ['ä', 'ö', 'ë', 'å', 'ü', 'ø', '§', '©', '®']):
+            continue
+        if any(b in w_low for b in ['tddng', 'tdong', 'dubng', 'versp00']):
+            continue
+        clean_words.append(w)
     
+    res = " ".join(clean_words)
+    res = re.sub(r'([,\.!?;:])\s*([,\.!?;:])+', r'\1', res)
+    res = re.sub(r'\s+([,\.!?;:])', r'\1', res)
+    res = re.sub(r'\s+', ' ', res).strip()
     return res
 
 DEFAULT_SYSTEM_PROMPTS = [

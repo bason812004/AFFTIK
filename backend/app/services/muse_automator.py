@@ -662,18 +662,42 @@ class MuseAutomator:
                     window.scrollTo(0, document.body.scrollHeight);
                 }""")
 
-                # Auto-click any confirmation / option button if Muse AI prompts for choice
-                await page.evaluate("""() => {
-                    const optionBtns = Array.from(document.querySelectorAll('button')).filter(b => {
-                        const t = (b.innerText || '').toLowerCase();
-                        return t.includes('dùng ảnh nhân vật') || t.includes('làm cảnh 2') || t.includes('dùng đúng ảnh') ||
-                               t.includes('tiếp tục') || t.includes('chọn ảnh') || t.includes('đồng ý') || t.includes('xác nhận') ||
-                               t.includes('bản ảnh mới') || t.includes('giữ nguyên');
-                    });
-                    if (optionBtns.length > 0) {
-                        try { optionBtns[0].click(); } catch (e) {}
+                # Auto-click any confirmation / option / cleaned-dialogue button if Muse AI prompts for choice
+                clicked_btn = await page.evaluate("""() => {
+                    const clickables = Array.from(document.querySelectorAll('button, [role="button"], [data-slot="button"], [data-testid*="button"], div[class*="rounded"][class*="border"], a[role="button"]'));
+                    
+                    // Priority 1: Suggested clean dialogue / fixed script confirmation
+                    for (const el of clickables) {
+                        const t = (el.innerText || '').toLowerCase().trim();
+                        if (!t) continue;
+                        if (t.includes('dùng thoại') || t.includes('soạn lại') || t.includes('thoại sạch') || t.includes('duyệt thoại') || t.includes('kịch bản sạch')) {
+                            try {
+                                el.scrollIntoView({ block: 'center', behavior: 'instant' });
+                                el.click();
+                                return 'Đồng ý thoại sạch: ' + t;
+                            } catch(e) {}
+                        }
                     }
+
+                    // Priority 2: General confirmation & continue buttons
+                    for (const el of clickables) {
+                        const t = (el.innerText || '').toLowerCase().trim();
+                        if (!t) continue;
+                        if (t.includes('dùng ảnh nhân vật') || t.includes('làm cảnh 2') || t.includes('dùng đúng ảnh') ||
+                            t.includes('tiếp tục') || t.includes('chọn ảnh') || t.includes('đồng ý') || t.includes('xác nhận') ||
+                            t.includes('bản ảnh mới') || t.includes('giữ nguyên') || t.includes('tạo ngay') || t.includes('chấp nhận')) {
+                            try {
+                                el.scrollIntoView({ block: 'center', behavior: 'instant' });
+                                el.click();
+                                return 'Xác nhận: ' + t;
+                            } catch(e) {}
+                        }
+                    }
+                    return null;
                 }""")
+                if clicked_btn:
+                    await log_fn(f"Đã tự động bấm '{clicked_btn}' trên Muse AI...", current_pct)
+                    await asyncio.sleep(1)
 
                 # Check if Muse is actively generating
                 is_muse_busy = await page.evaluate("""() => {
@@ -689,17 +713,43 @@ class MuseAutomator:
                 else:
                     await log_fn(f"Muse AI đang dựng video Cảnh {scene_number} cho '{pname}' ({elapsed}s)...", current_pct)
 
-                # Check if Muse AI triggered deduplication refusal WITHOUT attaching finished videos
-                muse_refusal = await page.evaluate("""() => {
+                # Check if Muse AI triggered clarification / clean dialogue prompt or deduplication refusal WITHOUT attaching finished videos
+                muse_state = await page.evaluate("""() => {
                     const assts = Array.from(document.querySelectorAll('[data-message-role="assistant"]'));
-                    if (!assts.length) return false;
+                    if (!assts.length) return null;
                     const last = assts[assts.length - 1];
                     const t = (last.innerText || '').toLowerCase();
                     const hasVids = last.querySelectorAll('video, [data-hatch-video-wrapper]').length > 0;
-                    if (hasVids) return false; // If videos are attached, Muse already delivered them!
-                    return t.includes('gửi lại đúng y hệt') || t.includes('không tạo lại để đỡ tốn') || t.includes('cứ nhắn thêm “làm lại”') || t.includes('cu nhan them');
+                    if (hasVids) return null; // If videos are attached, Muse already delivered them!
+
+                    if (t.includes('khoan đã') || t.includes('chưa tạo được') || t.includes('lỗi chữ') ||
+                        t.includes('tiếng vô nghĩa') || t.includes('soạn lại thoại') || t.includes('duyệt thoại') ||
+                        t.includes('mình soạn lại') || t.includes('bạn xác nhận') || t.includes('đoạn bị lỗi')) {
+                        return 'clean_dialogue';
+                    }
+                    if (t.includes('gửi lại đúng y hệt') || t.includes('không tạo lại để đỡ tốn') ||
+                        t.includes('cứ nhắn thêm “làm lại”') || t.includes('cu nhan them')) {
+                        return 'redo';
+                    }
+                    return null;
                 }""")
-                if muse_refusal and attempt % 4 == 0:
+
+                if muse_state == 'clean_dialogue' and attempt % 2 == 0 and not is_muse_busy:
+                    await log_fn(f"Phát hiện Muse AI đề xuất duyệt thoại sạch, tự động đồng ý để tạo video Cảnh {scene_number} ngay...", current_pct)
+                    try:
+                        p_in = await page.query_selector("textarea, div[contenteditable='true']")
+                        if p_in:
+                            await p_in.fill(f"Dùng thoại bạn vừa soạn lại để tạo video Cảnh {scene_number} giúp mình ngay nhé (chuẩn 9:16, 10s, 60fps)")
+                            await asyncio.sleep(0.3)
+                            s_btn = await page.query_selector("button[aria-label='Gửi']")
+                            if s_btn:
+                                await s_btn.click()
+                            else:
+                                await p_in.press("Enter")
+                            await asyncio.sleep(2)
+                    except Exception as ex_cd:
+                        logger.debug(f"Clean dialogue confirm send error: {ex_cd}")
+                elif muse_state == 'redo' and attempt % 3 == 0 and not is_muse_busy:
                     await log_fn(f"Phát hiện Muse AI giữ bản cũ không gửi video, tự động yêu cầu tạo bản mới cho Cảnh {scene_number}...", current_pct)
                     try:
                         p_in = await page.query_selector("textarea, div[contenteditable='true']")
@@ -711,7 +761,7 @@ class MuseAutomator:
                                 await s_btn.click()
                             else:
                                 await p_in.press("Enter")
-                            await asyncio.sleep(1.5)
+                            await asyncio.sleep(2)
                     except Exception as ex_ref:
                         logger.debug(f"Refusal retry send error: {ex_ref}")
 

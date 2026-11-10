@@ -142,19 +142,28 @@ def _clean_clause(text: str, max_words: int = 24, fallback: str = "") -> str:
     if not text:
         return fallback
     cleaned = " ".join(text.strip().replace("\n", " ").split()).rstrip(".!;:,")
+
+    # Strip OCR and screen artifacts
+    cleaned = re.sub(r'(?i)\b[qQ]?\s*t[iì]m\s+s[aả]n\s+ph[ẩả]m[^\.\,\!\?]*', '', cleaned)
+    cleaned = re.sub(r'(?i)\btddng\s*tv\b', '', cleaned)
+    cleaned = re.sub(r'(?i)\b\d+\s*dubng\b', '', cleaned)
+    cleaned = re.sub(r'(?i)\bquanh\s+vi[eế][\w]*\b', 'viền', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+
     for bad in [
         "công dụng vượt trội của sản phẩm", "sản phẩm chất lượng cao",
         "sản phẩm tiện ích", "sản phẩm thương mại", "công năng vượt trội của"
     ]:
         if bad in cleaned.lower():
             return fallback
-    words = cleaned.split()
+
+    words = [w for w in cleaned.split() if not any(c in w.lower() for c in ['ä', 'ö', 'ë', 'å', 'ü', 'ø', 'tddng', 'dubng'])]
     if not words:
         return fallback
     if len(words) <= max_words:
-        snippet = cleaned
+        snippet = " ".join(words)
     else:
-        clauses = [c.strip() for c in cleaned.replace(".", ",").split(",") if c.strip()]
+        clauses = [c.strip() for c in " ".join(words).replace(".", ",").split(",") if c.strip()]
         acc = []
         for c in clauses:
             cand = ", ".join(acc + [c])
@@ -699,6 +708,13 @@ class PipelineRunner:
                 and pid not in attempted_failed_in_pass
             ]
             if not pending:
+                # If there are projects that failed in this pass, wait 6s and retry them automatically!
+                if attempted_failed_in_pass and not state.get("paused_by_user"):
+                    logger.info(f"Batch queue: Tự động thử lại {len(attempted_failed_in_pass)} dự án chưa hoàn tất...")
+                    await asyncio.sleep(6)
+                    attempted_failed_in_pass.clear()
+                    continue
+
                 # If no pending items remain and none are paused, mark queue inactive
                 if not paused_ids and not waiting_name_ids:
                     state["active"] = False
@@ -1268,13 +1284,24 @@ class PipelineRunner:
                                 v1_path = s1_cand
 
                         if not v1_path:
-                            # Retry generate once
-                            await update_status("Tạo video Cảnh 1", 70, "Đang tự động gửi lại yêu cầu tạo Cảnh 1 lên Muse AI...")
+                            # Auto-heal: rebuild guaranteed clean affiliate dialogue for retry
+                            await update_status("Tạo video Cảnh 1", 70, "Đang tự động chuẩn hóa kịch bản sạch và gửi lại yêu cầu tạo Cảnh 1 lên Muse AI...")
                             try:
+                                clean_p_s1 = re.sub(r'\(bản[^\)]*\)', '', project.get('name', 'sản phẩm'), flags=re.IGNORECASE)
+                                clean_p_s1 = re.sub(r'\(kho xưởng[^\)]*\)', '', clean_p_s1, flags=re.IGNORECASE)
+                                clean_p_s1 = re.sub(r'#\d+', '', clean_p_s1).strip() or "sản phẩm chính hãng"
+                                clean_retry_s1 = (
+                                    f"[Cảnh 1 - Giới thiệu {clean_p_s1} | 9:16, 10s, 60fps] "
+                                    f"Nhân vật tươi cười, đặt tay và chỉ trực tiếp vào đúng sản phẩm {clean_p_s1} trong ảnh tham chiếu để giới thiệu công dụng. "
+                                    f"Bắt đầu chuyển động trực tiếp từ ảnh tham chiếu đính kèm: giữ nguyên 100% nhân vật và sản phẩm. "
+                                    f"Nhân vật nói tiếng Việt rõ ràng trọn vẹn trong 10 giây (46 từ): "
+                                    f"\"Xin chào cả nhà, hôm nay shop xin giới thiệu sản phẩm {clean_p_s1} chất lượng cao, thiết kế hiện đại tiện dụng cho cả gia đình. Hôm nay shop đang trợ giá ưu đãi kèm giao hàng nhanh, cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!\" "
+                                    f"(Không chèn chữ, không phụ đề)."
+                                )
                                 retry_res = await muse_automator.generate_scene_video(
                                     project_id=project_id,
                                     scene_number=1,
-                                    prompt=scene1_prompt,
+                                    prompt=clean_retry_s1,
                                     character_image_path=char_image_path or original_image,
                                     reference_image_path=char_image_path or original_image,
                                     progress_callback=lambda m, p: update_status("Tạo video Cảnh 1", int(70 + (p * 0.05)), m)
@@ -1383,12 +1410,24 @@ class PipelineRunner:
                                 v2_path = s2_cand
 
                         if not v2_path:
-                            await update_status("Tạo video Cảnh 2", 84, "Đang tự động gửi lại yêu cầu tạo Cảnh 2 lên Muse AI...")
+                            # Auto-heal: rebuild guaranteed clean affiliate dialogue for Scene 2 retry
+                            await update_status("Tạo video Cảnh 2", 84, "Đang tự động chuẩn hóa kịch bản sạch và gửi lại yêu cầu tạo Cảnh 2 lên Muse AI...")
                             try:
+                                clean_p_s2 = re.sub(r'\(bản[^\)]*\)', '', project.get('name', 'sản phẩm'), flags=re.IGNORECASE)
+                                clean_p_s2 = re.sub(r'\(kho xưởng[^\)]*\)', '', clean_p_s2, flags=re.IGNORECASE)
+                                clean_p_s2 = re.sub(r'#\d+', '', clean_p_s2).strip() or "sản phẩm chính hãng"
+                                clean_retry_s2 = (
+                                    f"[Cảnh 2 - Cận cảnh chi tiết {clean_p_s2} & Chốt đơn | 9:16, 10s, 60fps] "
+                                    f"Máy quay tiến nhẹ cận cảnh làm nổi bật chi tiết sản phẩm {clean_p_s2}, nhân vật mỉm cười chỉ tay vào sản phẩm rồi chỉ xuống góc trái kêu gọi chốt đơn. "
+                                    f"Tiếp nối trực tiếp từ khung hình ảnh tham chiếu, giữ nguyên 100% nhân vật và sản phẩm {clean_p_s2}. "
+                                    f"Nhân vật nói tiếng Việt rõ ràng trọn vẹn trong 10 giây (47 từ): "
+                                    f"\"Cận cảnh chi tiết từng đường nét của {clean_p_s2} với chất liệu bền đẹp, hoàn thiện tỉ mỉ và sắc nét giúp bạn an tâm sử dụng mỗi ngày. Hôm nay shop đang trợ giá cực hời, cả nhà bấm giỏ hàng góc trái chốt đơn nhận ưu đãi nhé!\" "
+                                    f"(Không chèn chữ, không phụ đề)."
+                                )
                                 retry_v2 = await muse_automator.generate_scene_video(
                                     project_id=project_id,
                                     scene_number=2,
-                                    prompt=scene2_prompt,
+                                    prompt=clean_retry_s2,
                                     character_image_path=char_image_path or original_image,
                                     reference_image_path=char_image_path or original_image,
                                     progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(84 + (p * 0.05)), m)
