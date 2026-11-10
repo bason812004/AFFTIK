@@ -1502,54 +1502,56 @@ class PipelineRunner:
                 ))
                 await db.commit()
 
-                await update_status("Ghép video FFmpeg", 92, "Đang xử lý chuẩn hóa 1080x1920 @ 60fps và ghép 2 cảnh...")
-                
-                stitch_res = await ffmpeg_service.stitch_scenes(
-                    project_id=project_id,
-                    video1_path=v1_path,
-                    video2_path=v2_path,
-                    product_slug=project.get("name", "tiktok").replace(" ", "_").lower(),
-                    transition="none",
-                    volume=1.0
-                )
-
-                if stitch_res.get("success"):
-                    final_path = stitch_res["final_video_path"]
-                    file_name = stitch_res["file_name"]
-                    export_id = str(uuid.uuid4())[:8]
-
-                    await db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
-                    await db.execute("""
-                        INSERT INTO exports (id, project_id, final_video_path, file_name, duration, resolution, fps, file_size, audio_info)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        export_id, project_id, final_path, file_name,
-                        stitch_res.get("duration", 20.0),
-                        stitch_res.get("resolution", "1080x1920"),
-                        stitch_res.get("fps", 30.0),
-                        stitch_res.get("file_size", 0),
-                        "AAC 48kHz Stereo"
-                    ))
-                    await db.execute("UPDATE projects SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (project_id,))
-                    await db.commit()
-
-                    await update_status("Hoàn thành", 100, f"Video TikTok Affiliate hoàn chỉnh đã xuất thành công: {file_name}!", status="completed")
-                    return {
-                        "success": True,
-                        "project_id": project_id,
-                        "final_video_url": stitch_res.get("url"),
-                        "final_video_path": final_path,
-                        "message": "Toàn bộ quy trình sản xuất video TikTok đã hoàn thành 100%!"
-                    }
-                else:
-                    await update_status("Lỗi ghép video", 95, f"Lỗi FFmpeg: {stitch_res.get('error')}", status="failed")
-                    return {"success": False, "error": stitch_res.get("error")}
-            else:
+            # STRICT VERIFICATION: Both Scene 1 and Scene 2 must exist as distinct files!
+            if not v1_path or not os.path.exists(v1_path) or not v2_path or not os.path.exists(v2_path):
                 await update_status("Lỗi tệp video", 90, "Không thể chuẩn bị tệp video cho 2 cảnh.", status="failed")
                 return {
                     "success": False,
                     "error": "Không thể chuẩn bị tệp video cho 2 cảnh."
                 }
+
+            await update_status("Ghép video FFmpeg", 92, "Đang xử lý chuẩn hóa 1080x1920 @ 60fps và ghép 2 cảnh...")
+            
+            stitch_res = await ffmpeg_service.stitch_scenes(
+                project_id=project_id,
+                video1_path=v1_path,
+                video2_path=v2_path,
+                product_slug=project.get("name", "tiktok").replace(" ", "_").lower(),
+                transition="none",
+                volume=1.0
+            )
+
+            if stitch_res.get("success"):
+                final_path = stitch_res["final_video_path"]
+                file_name = stitch_res["file_name"]
+                export_id = str(uuid.uuid4())[:8]
+
+                await db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
+                await db.execute("""
+                    INSERT INTO exports (id, project_id, final_video_path, file_name, duration, resolution, fps, file_size, audio_info)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    export_id, project_id, final_path, file_name,
+                    stitch_res.get("duration", 20.0),
+                    stitch_res.get("resolution", "1080x1920"),
+                    stitch_res.get("fps", 30.0),
+                    stitch_res.get("file_size", 0),
+                    "AAC 48kHz Stereo"
+                ))
+                await db.execute("UPDATE projects SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (project_id,))
+                await db.commit()
+
+                await update_status("Hoàn thành", 100, f"Video TikTok Affiliate hoàn chỉnh đã xuất thành công: {file_name}!", status="completed")
+                return {
+                    "success": True,
+                    "project_id": project_id,
+                    "final_video_url": stitch_res.get("url"),
+                    "final_video_path": final_path,
+                    "message": "Toàn bộ quy trình sản xuất video TikTok đã hoàn thành 100%!"
+                }
+            else:
+                await update_status("Lỗi ghép video", 95, f"Lỗi FFmpeg: {stitch_res.get('error')}", status="failed")
+                return {"success": False, "error": stitch_res.get("error")}
 
         except Exception as e:
             import traceback

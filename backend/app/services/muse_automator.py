@@ -52,13 +52,16 @@ STOP_WORDS = {
     'nhieu', 'loai', 'hop', 'chai', 'goi', 'san', 'pham', 'chinh', 'hang', 
     'tien', 'ich', 'chuan', 'sieu', 'dep', 'chat', 'luong', 'ngay', 'hom', 
     'nay', 'them', 'giam', 'gia', 'khuyen', 'mai', 'kem', 'nguoi', 'dung',
-    'chot', 'don', 'gioi', 'thieu', 'canh', 'ban', 'kho', 'xuong'
+    'chot', 'don', 'gioi', 'thieu', 'canh', 'ban', 'kho', 'xuong',
+    'trung', 'dong', 'dac', 'biet', 'chuc', 'nang', 'thuc', 'an', 'phan'
 }
 
 def _get_distinctive_phrases(product_name: str) -> List[str]:
     """
     Extracts distinctive signatures strictly for the PRODUCT itself,
     completely excluding generic warehouse/variant suffixes like '(Bản kho xưởng #1)'.
+    Only produces strong multi-word phrases and explicit product aliases.
+    Never returns ambiguous single words.
     """
     base_name = _get_base_product_name(product_name)
     base_slug = _slugify(base_name)
@@ -66,15 +69,15 @@ def _get_distinctive_phrases(product_name: str) -> List[str]:
     parts = [p for p in base_slug.split('-') if p and len(p) >= 2 and p not in STOP_WORDS]
     
     phrases = set()
-    if base_slug:
+    if base_slug and len(base_slug) >= 4:
         phrases.add(base_slug)
-    if base_low:
+    if base_low and len(base_low) >= 4:
         phrases.add(base_low)
     
     # 2-word combinations from base product name
     for i in range(len(parts) - 1):
         w1, w2 = parts[i], parts[i+1]
-        if w1 not in STOP_WORDS or w2 not in STOP_WORDS:
+        if w1 not in STOP_WORDS and w2 not in STOP_WORDS:
             phrases.add(f"{w1}-{w2}")
             phrases.add(f"{w1} {w2}")
             
@@ -83,19 +86,30 @@ def _get_distinctive_phrases(product_name: str) -> List[str]:
         w1, w2, w3 = parts[i], parts[i+1], parts[i+2]
         phrases.add(f"{w1}-{w2}-{w3}")
         phrases.add(f"{w1} {w2} {w3}")
-        
-    for p in parts:
-        if len(p) >= 5 and p not in STOP_WORDS:
-            phrases.add(p)
             
     # Product aliases from dictionary
     for cat_name, sigs in ALL_PRODUCT_SPECS.items():
         cat_slug = _slugify(cat_name)
         if (cat_slug in base_slug or base_slug in cat_slug or
             cat_name.lower() in base_low or base_low in cat_name.lower()):
-            phrases.update(sigs)
+            for s in sigs:
+                if s not in STOP_WORDS:
+                    phrases.add(s)
 
-    return [p for p in phrases if len(p) >= 4 and p not in STOP_WORDS]
+    known_single_brands = {'keepo', 'ugreen', 'sika', 'hanbio', 'combi'}
+    clean_phrases = []
+    for p in phrases:
+        p_clean = p.strip()
+        if not p_clean or p_clean in STOP_WORDS:
+            continue
+        words = p_clean.replace('-', ' ').split()
+        if len(words) == 1:
+            if p_clean in known_single_brands or len(p_clean) >= 7:
+                clean_phrases.append(p_clean)
+        else:
+            clean_phrases.append(p_clean)
+
+    return clean_phrases
 
 def _get_excluded_signatures(target_name: str) -> List[str]:
     base_name = _get_base_product_name(target_name)
@@ -109,7 +123,8 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
         if p_slug != base_slug and p_low not in base_low and base_low not in p_low:
             for s in spec_sigs:
                 if len(s.split()) >= 2 or '-' in s or len(s) >= 4:
-                    excluded.add(s)
+                    if s not in STOP_WORDS:
+                        excluded.add(s)
             excluded.add(p_slug)
             excluded.add(p_low)
             
@@ -124,7 +139,8 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
             p_low = p_base.lower().strip()
             if p_slug and p_slug != base_slug and p_low not in base_low and base_low not in p_low:
                 for s in _get_distinctive_phrases(p_base):
-                    excluded.add(s)
+                    if s not in STOP_WORDS:
+                        excluded.add(s)
                 excluded.add(p_slug)
                 excluded.add(p_low)
     except Exception:
@@ -135,8 +151,8 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
 def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: int) -> bool:
     """
     Guarantees zero cross-contamination and zero internal duplicates:
-    1. Checks if video_file has identical content to the companion scene of this project.
-    2. Checks if video_file has identical content to ANY scene video of any other project.
+    1. Checks if video_file has identical content/size to the companion scene of this project.
+    2. Checks if video_file has identical content/size to ANY scene video of any other project.
     Returns True if contaminated or duplicate.
     """
     if not video_file.exists():
@@ -146,27 +162,24 @@ def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: 
         return True
     
     import hashlib
-    def sample_hash(f: Path) -> str:
+    def get_full_hash(f: Path) -> str:
         h = hashlib.md5()
         with open(f, "rb") as fp:
-            h.update(fp.read(65536))
-            sz = f.stat().st_size
-            if sz > 131072:
-                fp.seek(sz - 65536)
-                h.update(fp.read(65536))
+            while chunk := fp.read(1048576):
+                h.update(chunk)
         return h.hexdigest()
 
-    my_hash = sample_hash(video_file)
+    my_hash = get_full_hash(video_file)
 
     # 1. Check companion scene of this same project
     other_scene = 2 if scene_num == 1 else 1
     other_file = video_file.parent / f"scene{other_scene}.mp4"
     if other_file.exists() and other_file.stat().st_size > 20000:
         other_sz = other_file.stat().st_size
-        if abs(other_sz - size) < 50000 or my_hash == sample_hash(other_file):
-            if my_hash == sample_hash(other_file):
-                logger.warning(f"File {video_file} matches identical content to companion scene {other_file}! Rejecting as internal duplicate.")
-                return True
+        other_hash = get_full_hash(other_file)
+        if my_hash == other_hash or abs(other_sz - size) < 500:
+            logger.warning(f"File {video_file} matches identical content/size ({size} vs {other_sz}) to companion scene {other_file}! Rejecting as internal duplicate.")
+            return True
         
     # 2. Check other projects
     for pdir in PROJECTS_DIR.iterdir():
@@ -174,10 +187,9 @@ def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: 
             for other_v in (pdir / "videos").glob("scene*.mp4"):
                 if other_v.exists() and other_v.stat().st_size > 20000:
                     other_sz = other_v.stat().st_size
-                    if abs(other_sz - size) < 50000 or my_hash == sample_hash(other_v):
-                        if my_hash == sample_hash(other_v):
-                            logger.warning(f"Cross-contamination detected: {video_file} matches content of {other_v}! Rejecting contaminated file.")
-                            return True
+                    if abs(other_sz - size) < 500 or my_hash == get_full_hash(other_v):
+                        logger.warning(f"Cross-contamination detected: {video_file} matches content of {other_v}! Rejecting contaminated file.")
+                        return True
     return False
 
 class MuseAutomator:
@@ -358,7 +370,7 @@ class MuseAutomator:
 
                 // Must NOT match excluded signatures of other products
                 const matchesNeg = normNeg.some(sig => turnCombined.includes(sig));
-                if (matchesNeg && !matchesPos) continue;
+                if (matchesNeg) continue;
 
                 // Strict Warehouse check
                 const userHasWh = uNorm.includes('kho xuong') || uNorm.includes('ban kho') || uNorm.includes('tong kho') || uNorm.includes('pallet') || uNorm.includes('xuat xuong');
@@ -402,9 +414,13 @@ class MuseAutomator:
                     const isS2 = fullTxt.includes('canh 2') || fullTxt.includes('canh-2') || fullTxt.includes('chot don') || fullTxt.includes('can canh') || fullTxt.includes('poster');
 
                     if (isS2 && !results.scene2) {
-                        results.scene2 = { src: single.src, aria: single.caption || 'Cảnh 2' };
+                        if (!results.scene1 || results.scene1.src !== single.src) {
+                            results.scene2 = { src: single.src, aria: single.caption || 'Cảnh 2' };
+                        }
                     } else if (!isS2 && !results.scene1) {
-                        results.scene1 = { src: single.src, aria: single.caption || 'Cảnh 1' };
+                        if (!results.scene2 || results.scene2.src !== single.src) {
+                            results.scene1 = { src: single.src, aria: single.caption || 'Cảnh 1' };
+                        }
                     }
                 }
 
@@ -699,9 +715,9 @@ class MuseAutomator:
                     except Exception as ex_ref:
                         logger.debug(f"Refusal retry send error: {ex_ref}")
 
-                # Look STRICTLY in new messages generated AFTER init_msg_count
+                # Look STRICTLY in assistant messages for this prompt, guaranteeing zero cross-message mixing
                 newest_video = await page.evaluate("""async (args) => {
-                    const { initMsgCount, sceneNum } = args;
+                    const { initMsgCount, sceneNum, posSigs, negSigs, isWarehouse } = args;
 
                     function isAvatar(el) {
                         if (!el) return true;
@@ -716,26 +732,48 @@ class MuseAutomator:
                         return false;
                     }
 
-                    const allItems = Array.from(document.querySelectorAll('[data-message-item="true"], [data-message-role]'));
-                    if (allItems.length <= initMsgCount) return null;
-
-                    // STRICT BOUNDARY: ONLY inspect messages that appeared AFTER submitting prompt!
-                    const newItems = allItems.slice(initMsgCount);
-
-                    for (const it of newItems) {
-                        if (it.querySelector('[role="status"], [data-slot="skeleton"], video, [data-hatch-video-wrapper]')) {
-                            try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
-                        }
+                    function normalize(str) {
+                        if (!str) return '';
+                        return str.toLowerCase()
+                            .replace(/đ/g, 'd')
+                            .replace(/Đ/g, 'd')
+                            .normalize('NFD')
+                            .replace(/[\\u0300-\\u036f]/g, '');
                     }
 
-                    const newVideos = [];
-                    const seenSrcs = new Set();
+                    const normPos = Array.from(new Set((posSigs || []).map(normalize).filter(s => s.length >= 3)));
+                    const normNeg = Array.from(new Set((negSigs || []).map(normalize).filter(s => s.length >= 3)));
 
-                    for (const it of newItems) {
-                        const role = (it.getAttribute('data-message-role') || '').toLowerCase();
-                        if (role === 'user') continue;
+                    const asstMessages = Array.from(document.querySelectorAll('[data-message-role="assistant"]'));
+                    if (!asstMessages.length) return null;
+
+                    // Scroll recent assistant messages into view to trigger lazy loading
+                    for (let i = Math.max(0, asstMessages.length - 3); i < asstMessages.length; i++) {
+                        try { asstMessages[i].scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
+                    }
+
+                    let targetMsg = null;
+                    let targetVideos = [];
+
+                    // Scan assistant messages from the latest backwards:
+                    for (let i = asstMessages.length - 1; i >= 0; i--) {
+                        const it = asstMessages[i];
+                        const text = normalize(it.innerText || '');
+
+                        // Strict: Reject message if it explicitly matches another product's excluded signature!
+                        if (normNeg.some(sig => text.includes(sig))) continue;
+
+                        // Warehouse alignment check if message mentions context
+                        if (text.length > 20) {
+                            const hasWh = text.includes('kho xuong') || text.includes('ban kho') || text.includes('tong kho') || text.includes('pallet');
+                            if (isWarehouse && !hasWh && !normPos.some(s => text.includes(s))) continue;
+                            if (!isWarehouse && hasWh) continue;
+                        }
 
                         const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
+                        const seenSrcs = new Set();
+                        const vids = [];
+
                         for (const el of rawVideos) {
                             if (isAvatar(el)) continue;
 
@@ -754,56 +792,56 @@ class MuseAutomator:
 
                             if (!seenSrcs.has(src)) {
                                 seenSrcs.add(src);
-
                                 let caption = (el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || it.innerText || '').toLowerCase();
-                                newVideos.push({
-                                    src,
-                                    caption,
-                                    aria: caption
-                                });
+                                vids.push({ src, caption });
+                            }
+                        }
+
+                        if (vids.length > 0) {
+                            targetMsg = it;
+                            targetVideos = vids;
+                            break; // Found the matching assistant message! NEVER combine videos across multiple messages!
+                        }
+                    }
+
+                    if (!targetVideos.length) return null;
+
+                    // If this assistant message returned 2 or more videos:
+                    // Video 0 is Scene 1, Video 1 is Scene 2 of THIS EXACT RESPONSE!
+                    if (targetVideos.length >= 2) {
+                        const v1 = targetVideos[0];
+                        const v2 = targetVideos[1];
+
+                        if (v1.src !== v2.src) {
+                            if (sceneNum === 1) {
+                                return {
+                                    src: v1.src,
+                                    companionSrc: v2.src,
+                                    aria: v1.caption || 'Cảnh 1'
+                                };
+                            } else {
+                                return {
+                                    src: v2.src,
+                                    companionSrc: v1.src,
+                                    aria: v2.caption || 'Cảnh 2'
+                                };
                             }
                         }
                     }
 
-                    if (!newVideos.length) return null;
-
-                    // Deduplicate sources
-                    const uniqueVideos = [];
-                    const seen = new Set();
-                    for (const v of newVideos) {
-                        if (!seen.has(v.src)) {
-                            seen.add(v.src);
-                            uniqueVideos.push(v);
-                        }
-                    }
-                    if (!uniqueVideos.length) return null;
-
-                    // If Muse returned BOTH Scene 1 and Scene 2 together in this response:
-                    if (uniqueVideos.length >= 2) {
-                        const v1 = uniqueVideos[0];
-                        const v2 = uniqueVideos[1];
-
-                        if (sceneNum === 1) {
-                            return {
-                                src: v1.src,
-                                companionSrc: (v2.src !== v1.src) ? v2.src : null,
-                                aria: v1.aria
-                            };
-                        } else {
-                            return {
-                                src: v2.src,
-                                companionSrc: (v1.src !== v2.src) ? v1.src : null,
-                                aria: v2.aria
-                            };
-                        }
-                    }
-
-                    // If only 1 video returned in new messages:
-                    const single = uniqueVideos[0];
-                    return { src: single.src, aria: single.aria };
+                    // Single video in message:
+                    const single = targetVideos[0];
+                    return {
+                        src: single.src,
+                        companionSrc: null,
+                        aria: single.caption || ('Cảnh ' + sceneNum)
+                    };
                 }""", {
                     "initMsgCount": init_msg_count,
-                    "sceneNum": scene_number
+                    "sceneNum": scene_number,
+                    "posSigs": pos_sigs,
+                    "negSigs": neg_sigs,
+                    "isWarehouse": _is_warehouse_product(pname)
                 })
 
                 if newest_video and newest_video.get("src"):
