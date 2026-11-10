@@ -38,6 +38,22 @@ async def list_projects(db = Depends(get_db)):
     for r in rows:
         p = dict(r)
         pid = p["id"]
+
+        # Verify file existence on disk for original_image_path and primary_character_image_path
+        if p.get("original_image_path") and not os.path.exists(p["original_image_path"]):
+            prod_cands = list((PROJECTS_DIR / pid / "product").glob("*"))
+            if prod_cands and os.path.exists(str(prod_cands[0])):
+                p["original_image_path"] = str(prod_cands[0])
+            else:
+                p["original_image_path"] = None
+
+        if p.get("primary_character_image_path") and not os.path.exists(p["primary_character_image_path"]):
+            char_cands = list((PROJECTS_DIR / pid / "character").glob("*"))
+            if char_cands and os.path.exists(str(char_cands[0])):
+                p["primary_character_image_path"] = str(char_cands[0])
+            else:
+                p["primary_character_image_path"] = None
+
         # Fetch counts (only counting files that actually exist on disk)
         c_cursor = await db.execute("SELECT file_path FROM assets WHERE project_id = ? AND asset_type = 'ai_character'", (pid,))
         c_rows = await c_cursor.fetchall()
@@ -1738,12 +1754,32 @@ async def clone_video_variant(
     new_project_id = str(uuid.uuid4())[:8]
     create_project_folders(new_project_id)
 
-    # Copy original product image
+    # Copy original product image with resilient search across paths, assets, and base product variants
     orig_img = orig_dict.get("original_image_path")
     if not orig_img or not os.path.exists(orig_img):
         cands = list((PROJECTS_DIR / project_id / "product").glob("*"))
-        if cands:
+        if cands and os.path.exists(str(cands[0])):
             orig_img = str(cands[0])
+
+    if not orig_img or not os.path.exists(orig_img):
+        a_cur = await db.execute("SELECT file_path FROM assets WHERE project_id = ? AND asset_type = 'original_product'", (project_id,))
+        a_row = await a_cur.fetchone()
+        if a_row and a_row[0] and os.path.exists(a_row[0]):
+            orig_img = a_row[0]
+
+    if not orig_img or not os.path.exists(orig_img):
+        # Look for product image in other projects with matching base product name
+        sim_cur = await db.execute("SELECT id, original_image_path FROM projects WHERE name LIKE ? AND id != ? ORDER BY updated_at DESC", (f"%{base_name}%", project_id))
+        for sim_row in await sim_cur.fetchall():
+            sim_id = sim_row[0]
+            sim_path = sim_row[1]
+            if sim_path and os.path.exists(sim_path):
+                orig_img = sim_path
+                break
+            sim_cands = list((PROJECTS_DIR / sim_id / "product").glob("*"))
+            if sim_cands and os.path.exists(str(sim_cands[0])):
+                orig_img = str(sim_cands[0])
+                break
 
     new_prod_path = None
     if orig_img and os.path.exists(orig_img):
@@ -1751,6 +1787,14 @@ async def clone_video_variant(
         dest_prod = PROJECTS_DIR / new_project_id / "product" / f"product_original{ext}"
         shutil.copyfile(orig_img, str(dest_prod))
         new_prod_path = str(dest_prod)
+
+    # Strictly forbid creating empty ghost projects without a product image
+    if not new_prod_path or not os.path.exists(new_prod_path):
+        shutil.rmtree(PROJECTS_DIR / new_project_id, ignore_errors=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dự án '{raw_name}' không còn tệp ảnh sản phẩm trên máy tính (tệp đã bị xóa hoặc di chuyển). Vui lòng chọn dự án có ảnh hoặc tải/dán ảnh sản phẩm (Ctrl+V) trước khi nhân bản."
+        )
 
     # Compose new warehouse presenter image
     char_dest = PROJECTS_DIR / new_project_id / "character" / "character_primary.png"

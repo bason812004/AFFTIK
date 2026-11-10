@@ -466,9 +466,13 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
             <button
               type="button"
               onClick={(e) => handleCloneVariant(e, p.id)}
-              disabled={isBusy}
-              title="Nhân bản video: Giữ sản phẩm, tạo nhân vật mới ở bối cảnh tổng kho xưởng giá rẻ và chạy tự động video mới"
-              className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center gap-1 transition-all"
+              disabled={isBusy || !p.original_image_path}
+              title={!p.original_image_path ? "Dự án này không có tệp ảnh sản phẩm trên máy, không thể nhân bản" : "Nhân bản video: Giữ sản phẩm, tạo nhân vật mới ở bối cảnh tổng kho xưởng giá rẻ và chạy tự động video mới"}
+              className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-all ${
+                !p.original_image_path
+                  ? 'bg-slate-800/30 border-slate-700/30 text-slate-500 cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border-amber-500/40 text-amber-300'
+              }`}
             >
               {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
               <span>Nhân bản (Kho xưởng)</span>
