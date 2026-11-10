@@ -1413,8 +1413,29 @@ class PipelineRunner:
 
             if v1_path and v2_path and os.path.exists(v1_path) and os.path.exists(v2_path):
                 # Guard against identical duplicate scene videos
-                if os.path.getsize(v1_path) == os.path.getsize(v2_path):
-                    logger.warning(f"Detected duplicate scene videos for {project_id}! Scene 1 and Scene 2 have identical size ({os.path.getsize(v1_path)}B). Regenerating distinct Scene 2...")
+                import hashlib
+                def _calc_sample_hash(p: str) -> str:
+                    try:
+                        h = hashlib.md5()
+                        with open(p, "rb") as fp:
+                            h.update(fp.read(65536))
+                            sz = os.path.getsize(p)
+                            if sz > 131072:
+                                fp.seek(sz - 65536)
+                                h.update(fp.read(65536))
+                        return h.hexdigest()
+                    except Exception:
+                        return ""
+
+                is_internal_dup = (os.path.getsize(v1_path) == os.path.getsize(v2_path))
+                if not is_internal_dup and abs(os.path.getsize(v1_path) - os.path.getsize(v2_path)) < 50000:
+                    h1 = _calc_sample_hash(v1_path)
+                    h2 = _calc_sample_hash(v2_path)
+                    if h1 and h1 == h2:
+                        is_internal_dup = True
+
+                if is_internal_dup:
+                    logger.warning(f"Detected duplicate scene videos for {project_id}! Scene 1 and Scene 2 have identical content. Regenerating distinct Scene 2...")
                     try:
                         os.unlink(v2_path)
                     except Exception:
@@ -1423,17 +1444,36 @@ class PipelineRunner:
                     await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
                     await db.commit()
 
-                    # Regenerate Scene 2 with distinct closeup on product
-                    synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
-                    await ffmpeg_service.create_scene_motion_video(
-                        image_path=original_image or char_image_path,
-                        output_path=synth_path2,
-                        duration=10.0,
-                        motion_type="closeup",
-                        dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
-                        fps=60
-                    )
-                    v2_path = synth_path2
+                    if video_engine == "muse":
+                        await update_status("Tạo video Cảnh 2", 80, "Phát hiện Cảnh 2 trùng Cảnh 1, đang gửi yêu cầu tạo riêng Cảnh 2 cận cảnh trên Muse AI...")
+                        try:
+                            v2_retry = await muse_automator.generate_scene_video(
+                                project_id=project_id,
+                                scene_number=2,
+                                prompt=scene2_prompt,
+                                character_image_path=char_image_path or original_image,
+                                reference_image_path=original_image or char_image_path,
+                                progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(80 + (p * 0.08)), m)
+                            )
+                            if v2_retry.get("success") and v2_retry.get("video_path") and os.path.exists(v2_retry["video_path"]):
+                                if os.path.getsize(v2_retry["video_path"]) != os.path.getsize(v1_path):
+                                    v2_path = v2_retry["video_path"]
+                        except Exception as ex_m2:
+                            logger.warning(f"Muse distinct Scene 2 retry error: {ex_m2}")
+
+                    if not v2_path:
+                        # Regenerate Scene 2 with distinct closeup on product
+                        synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
+                        await ffmpeg_service.create_scene_motion_video(
+                            image_path=original_image or char_image_path,
+                            output_path=synth_path2,
+                            duration=10.0,
+                            motion_type="closeup",
+                            dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
+                            fps=60
+                        )
+                        v2_path = synth_path2
+
                     probe2 = await ffmpeg_service.probe_video(v2_path)
                     v2_id = str(uuid.uuid4())[:8]
                     await db.execute("""

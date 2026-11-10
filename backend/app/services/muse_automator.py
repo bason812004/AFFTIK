@@ -24,6 +24,16 @@ def _slugify(text: str) -> str:
     text = re.sub(r'[^\w\s-]', ' ', text).strip().lower()
     return re.sub(r'[-\s]+', '-', text)
 
+def _is_warehouse_product(name: str) -> bool:
+    low = (name or "").lower()
+    return any(w in low for w in ["kho xưởng", "kho xuong", "bản kho", "ban kho", "tổng kho", "tong kho", "xuat xuong", "pallet"])
+
+def _get_base_product_name(name: str) -> str:
+    clean = re.sub(r'\(bản[^\)]*\)', '', name, flags=re.IGNORECASE)
+    clean = re.sub(r'\(kho xưởng[^\)]*\)', '', clean, flags=re.IGNORECASE)
+    clean = re.sub(r'#\d+', '', clean)
+    return clean.strip()
+
 ALL_PRODUCT_SPECS = {
     'máy bơm lốp xe hơi': ['may-bom', 'bom-lop', 'ugreen', 'may bom', 'bom lop', 'bom xe hoi', 'bom lop xe', 'may bom lop'],
     'phân bón trung vi lượng': ['phan-bon', 'trung-vi-luong', 'phan bon', 'trung vi luong', 'combi', 'combi pro', 'combi-pro'],
@@ -46,17 +56,24 @@ STOP_WORDS = {
 }
 
 def _get_distinctive_phrases(product_name: str) -> List[str]:
+    is_wh = _is_warehouse_product(product_name)
+    base_name = _get_base_product_name(product_name)
     slug = _slugify(product_name)
+    base_slug = _slugify(base_name)
     parts = [p for p in slug.split('-') if p and len(p) >= 2]
     
     phrases = set()
     if slug:
         phrases.add(slug)
+    if base_slug:
+        phrases.add(base_slug)
     
-    # Also add original unslugified lowercase product name
     low_name = (product_name or "").lower().strip()
+    low_base = base_name.lower().strip()
     if low_name:
         phrases.add(low_name)
+    if low_base:
+        phrases.add(low_base)
     
     # 2-word combinations
     for i in range(len(parts) - 1):
@@ -71,7 +88,6 @@ def _get_distinctive_phrases(product_name: str) -> List[str]:
         phrases.add(f"{w1}-{w2}-{w3}")
         phrases.add(f"{w1} {w2} {w3}")
         
-    # Long distinctive single tokens (>= 5 chars and not stop word)
     for p in parts:
         if len(p) >= 5 and p not in STOP_WORDS:
             phrases.add(p)
@@ -79,22 +95,28 @@ def _get_distinctive_phrases(product_name: str) -> List[str]:
     # Product aliases
     for cat_name, sigs in ALL_PRODUCT_SPECS.items():
         cat_slug = _slugify(cat_name)
-        if cat_slug in slug or slug in cat_slug or cat_name.lower() in low_name or low_name in cat_name.lower():
+        if (cat_slug in slug or slug in cat_slug or 
+            cat_slug in base_slug or base_slug in cat_slug or
+            cat_name.lower() in low_name or low_name in cat_name.lower() or
+            cat_name.lower() in low_base or low_base in cat_name.lower()):
             phrases.update(sigs)
             
+    if is_wh:
+        phrases.update(['kho-xuong', 'kho xuong', 'kho xuong re', 'tong kho', 'gia goc', 'xuat xuong', 'pallet'])
+
     return [p for p in phrases if len(p) >= 3 and p not in STOP_WORDS]
 
 def _get_excluded_signatures(target_name: str) -> List[str]:
-    target_slug = _slugify(target_name)
-    target_low = (target_name or "").lower().strip()
+    base_name = _get_base_product_name(target_name)
+    base_slug = _slugify(base_name)
+    base_low = base_name.lower().strip()
     excluded = set()
     
     for prod_name, spec_sigs in ALL_PRODUCT_SPECS.items():
         p_slug = _slugify(prod_name)
         p_low = prod_name.lower().strip()
-        if p_slug != target_slug and p_low not in target_low and target_low not in p_low:
+        if p_slug != base_slug and p_low not in base_low and base_low not in p_low:
             for s in spec_sigs:
-                # ONLY add compound phrases (>= 2 words) or distinctive brand tokens (>= 5 chars)
                 if len(s.split()) >= 2 or '-' in s or len(s) >= 5:
                     excluded.add(s)
             excluded.add(p_slug)
@@ -106,12 +128,12 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
         conn.close()
         for r in rows:
             p_name = r["name"] or ""
-            p_slug = _slugify(p_name)
-            p_low = p_name.lower().strip()
-            if p_slug and p_slug != target_slug and p_low not in target_low and target_low not in p_low:
+            p_base = _get_base_product_name(p_name)
+            p_slug = _slugify(p_base)
+            p_low = p_base.lower().strip()
+            if p_slug and p_slug != base_slug and p_low not in base_low and base_low not in p_low:
                 excluded.add(p_slug)
                 excluded.add(p_low)
-                # DO NOT split into single generic words like 'vang', 'phuc', 'nhua', 'long', 'duong'!
     except Exception:
         pass
         
@@ -120,8 +142,8 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
 def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: int) -> bool:
     """
     Guarantees zero cross-contamination and zero internal duplicates:
-    1. Checks if video_file has identical byte size / content to the companion scene of this project.
-    2. Checks if video_file has identical byte size / content to ANY scene video of any other project.
+    1. Checks if video_file has identical content to the companion scene of this project.
+    2. Checks if video_file has identical content to ANY scene video of any other project.
     Returns True if contaminated or duplicate.
     """
     if not video_file.exists():
@@ -141,13 +163,15 @@ def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: 
                 h.update(fp.read(65536))
         return h.hexdigest()
 
-    # 1. Check other scene of same project
+    my_hash = sample_hash(video_file)
+
+    # 1. Check companion scene of this same project
     other_scene = 2 if scene_num == 1 else 1
     other_file = video_file.parent / f"scene{other_scene}.mp4"
-    if other_file.exists():
+    if other_file.exists() and other_file.stat().st_size > 20000:
         other_sz = other_file.stat().st_size
-        if abs(other_sz - size) < 5000:
-            if sample_hash(video_file) == sample_hash(other_file):
+        if abs(other_sz - size) < 50000 or my_hash == sample_hash(other_file):
+            if my_hash == sample_hash(other_file):
                 logger.warning(f"File {video_file} matches identical content to companion scene {other_file}! Rejecting as internal duplicate.")
                 return True
         
@@ -155,10 +179,10 @@ def _is_duplicate_or_contaminated(video_file: Path, project_id: str, scene_num: 
     for pdir in PROJECTS_DIR.iterdir():
         if pdir.is_dir() and pdir.name != project_id:
             for other_v in (pdir / "videos").glob("scene*.mp4"):
-                if other_v.exists():
+                if other_v.exists() and other_v.stat().st_size > 20000:
                     other_sz = other_v.stat().st_size
-                    if abs(other_sz - size) < 5000:
-                        if sample_hash(video_file) == sample_hash(other_v):
+                    if abs(other_sz - size) < 50000 or my_hash == sample_hash(other_v):
+                        if my_hash == sample_hash(other_v):
                             logger.warning(f"Cross-contamination detected: {video_file} matches content of {other_v}! Rejecting contaminated file.")
                             return True
     return False
@@ -170,7 +194,8 @@ class MuseAutomator:
     - Automates prompt entry (Hook & CTA for 10s 60fps scenes).
     - Detects and extracts blob video bytes directly from browser page context.
     - Standardizes with FFmpeg (1080x1920 @ 60 FPS).
-    - Strict product signature matching to guarantee zero cross-product contamination.
+    - Strict boundary isolation: only captures newly generated videos after prompt submission.
+    - Strict product signature and warehouse variant matching to guarantee zero cross-contamination.
     """
 
     def __init__(self):
@@ -216,17 +241,17 @@ class MuseAutomator:
         project_name: str
     ) -> Dict[str, Any]:
         """
-        Scans messages in Muse AI chat strictly for videos matching project_name.
+        Scans messages in Muse AI chat strictly for videos matching project_name and its variant.
         Extracts distinct Scene 1 and Scene 2 videos while mathematically filtering out
         avatar videos, duplicate videos, and cross-project contamination.
         """
         target_slug = _slugify(project_name)
         pos_sigs = _get_distinctive_phrases(project_name)
         neg_sigs = _get_excluded_signatures(project_name)
+        is_warehouse = _is_warehouse_product(project_name)
 
         try:
             await page.wait_for_selector('[data-message-item="true"], [data-message-role]', timeout=8000)
-            # Auto-click unread messages button and scroll scrollers to bottom to hydrate virtual DOM
             await page.evaluate("""() => {
                 const btns = Array.from(document.querySelectorAll('button'));
                 const unread = btns.find(b => (b.innerText || '').includes('tin nhắn'));
@@ -240,7 +265,7 @@ class MuseAutomator:
             pass
 
         match_data = await page.evaluate("""async (args) => {
-            const { targetSlug, posSigs, negSigs } = args;
+            const { targetSlug, posSigs, negSigs, isWarehouse } = args;
             const results = { scene1: null, scene2: null };
 
             function normalize(str) {
@@ -272,7 +297,6 @@ class MuseAutomator:
             results.msgCount = items.length;
             if (!items.length) return results;
 
-            // Scroll potential unhydrated video cards into view to trigger client-side mounting
             for (let i = items.length - 1; i >= Math.max(0, items.length - 20); i--) {
                 const it = items[i];
                 if (it.querySelector('[role="status"], [data-slot="skeleton"], video, [data-hatch-video-wrapper]')) {
@@ -298,17 +322,32 @@ class MuseAutomator:
                 turns.push({ turnId: currentTurnId, items: currentTurn });
             }
 
-            // Scan turns in reverse (newest turn to oldest)
+            // Scan turns backwards (newest to oldest)
             for (let t = turns.length - 1; t >= 0; t--) {
                 const turn = turns[t];
                 const turnTextRaw = turn.items.map(it => it.innerText || '').join(' ').toLowerCase();
                 const turnTextNorm = normalize(turnTextRaw);
 
-                // Quick filter: turn must mention something related to the target product
+                // Strict Warehouse Variant Isolation:
+                if (isWarehouse) {
+                    const isWhTurn = turnTextNorm.includes('kho xuong') || turnTextNorm.includes('tong kho') || 
+                                     turnTextNorm.includes('gia goc') || turnTextNorm.includes('pallet') || 
+                                     turnTextNorm.includes('xuat xuong') || turnTextNorm.includes('ban kho');
+                    if (!isWhTurn) continue;
+                } else {
+                    const isWhTurn = turnTextNorm.includes('kho xuong') || turnTextNorm.includes('tong kho') || 
+                                     turnTextNorm.includes('ban kho xuong');
+                    if (isWhTurn) continue;
+                }
+
+                // Turn must mention positive signature of target product
                 const turnHasPos = normPosSigs.some(sig => turnTextNorm.includes(sig));
                 if (!turnHasPos) continue;
 
-                // Find all video presentation elements in this turn with their local contextual captions
+                // Turn must not explicitly belong to another product
+                const turnHasNeg = normNegSigs.some(sig => turnTextNorm.includes(sig));
+                if (turnHasNeg && !turnHasPos) continue;
+
                 const turnVideos = [];
                 const seenTurnSrcs = new Set();
 
@@ -335,32 +374,17 @@ class MuseAutomator:
                         if (!seenTurnSrcs.has(src)) {
                             seenTurnSrcs.add(src);
 
-                            // Build local context text: immediate item text + previous 2 sibling texts
-                            let localText = (it.innerText || '');
-                            let pNode = it.previousElementSibling;
-                            let hops = 0;
-                            while (pNode && hops < 2) {
-                                localText = (pNode.innerText || '') + ' ' + localText;
-                                if (pNode.querySelector('video, [data-hatch-video-wrapper]')) break;
-                                pNode = pNode.previousElementSibling;
-                                hops++;
+                            let caption = '';
+                            let prev = el.previousElementSibling;
+                            while (prev && !prev.querySelector('video, [data-hatch-video-wrapper]')) {
+                                caption = (prev.innerText || '') + ' ' + caption;
+                                prev = prev.previousElementSibling;
                             }
-                            const normLocal = normalize(localText);
-
-                            // Strict cross-product anti-contamination:
-                            // Check if this specific video's local caption explicitly names another product!
-                            const hasOtherProduct = normNegSigs.some(sig => normLocal.includes(sig));
-                            const hasThisProduct = normPosSigs.some(sig => normLocal.includes(sig));
-
-                            // If this video explicitly belongs to another product and does NOT have strong pos, reject it!
-                            if (hasOtherProduct && !hasThisProduct) {
-                                continue;
-                            }
+                            if (!caption) caption = it.innerText || '';
 
                             turnVideos.push({
-                                element: el,
                                 src,
-                                localText: normLocal,
+                                caption: normalize(caption),
                                 aria: el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || ''
                             });
                         }
@@ -369,43 +393,34 @@ class MuseAutomator:
 
                 if (!turnVideos.length) continue;
 
-                // Inspect each video in this turn
-                for (let vIdx = 0; vIdx < turnVideos.length; vIdx++) {
-                    const tv = turnVideos[vIdx];
-                    const tText = tv.localText;
-
-                    const isExplicitS2 = tText.includes('canh 2') || tText.includes('canh-2') || tText.includes('canh2') || tText.includes('chot don') || tText.includes('can canh');
-                    const isExplicitS1 = tText.includes('canh 1') || tText.includes('canh-1') || tText.includes('canh1') || tText.includes('hook') || tText.includes('gioi thieu');
-
-                    if (isExplicitS2 && !results.scene2) {
-                        results.scene2 = { src: tv.src, aria: tv.aria };
-                    } else if (isExplicitS1 && !results.scene1) {
-                        results.scene1 = { src: tv.src, aria: tv.aria };
-                    } else if (turnVideos.length === 2) {
-                        // If 2 videos in same turn for this product: Video 0 is Scene 1, Video 1 is Scene 2
-                        if (vIdx === 0 && !results.scene1) {
-                            results.scene1 = { src: tv.src, aria: tv.aria };
-                        } else if (vIdx === 1 && !results.scene2) {
-                            results.scene2 = { src: tv.src, aria: tv.aria };
-                        }
-                    } else if (turnVideos.length === 1) {
-                        if (!results.scene1) results.scene1 = { src: tv.src, aria: tv.aria };
-                        else if (!results.scene2 && results.scene1.src !== tv.src) results.scene2 = { src: tv.src, aria: tv.aria };
+                if (turnVideos.length >= 2) {
+                    if (turnVideos[0].src !== turnVideos[1].src) {
+                        results.scene1 = { src: turnVideos[0].src, aria: turnVideos[0].aria };
+                        results.scene2 = { src: turnVideos[1].src, aria: turnVideos[1].aria };
+                        break;
+                    }
+                } else if (turnVideos.length === 1) {
+                    const single = turnVideos[0];
+                    const cap = single.caption;
+                    const isS2 = cap.includes('canh 2') || cap.includes('canh-2') || cap.includes('chot don') || cap.includes('can canh');
+                    if (isS2 && !results.scene2) {
+                        results.scene2 = { src: single.src, aria: single.aria };
+                    } else if (!results.scene1) {
+                        results.scene1 = { src: single.src, aria: single.aria };
                     }
                 }
 
                 if (results.scene1 && results.scene2) break;
             }
 
-            // Guarantee distinct sources: never allow Scene 1 and Scene 2 to have identical video URL!
             if (results.scene1 && results.scene2 && results.scene1.src === results.scene2.src) {
                 results.scene2 = null;
             }
 
             return results;
-        }""", {"targetSlug": target_slug, "posSigs": pos_sigs, "negSigs": neg_sigs})
+        }""", {"targetSlug": target_slug, "posSigs": pos_sigs, "negSigs": neg_sigs, "isWarehouse": is_warehouse})
 
-        logger.info(f"[Muse Scan] Scanned chat for '{project_name}' on {page.url}: msgs={match_data.get('msgCount', 0)}, s1={'found' if match_data.get('scene1') else 'none'}, s2={'found' if match_data.get('scene2') else 'none'}")
+        logger.info(f"[Muse Scan] Scanned chat for '{project_name}' (wh={is_warehouse}) on {page.url}: msgs={match_data.get('msgCount', 0)}, s1={'found' if match_data.get('scene1') else 'none'}, s2={'found' if match_data.get('scene2') else 'none'}")
         return match_data or {}
 
 
@@ -420,7 +435,8 @@ class MuseAutomator:
     ) -> Dict[str, Any]:
         """
         Automates creating a scene video (Scene 1 or Scene 2) on Muse AI.
-        Directly extracts and standardizes high-resolution video into 1080x1920 @ 60 FPS.
+        Guarantees strict boundary isolation: only captures newly generated videos after prompt submission.
+        Standardizes high-resolution video into 1080x1920 @ 60 FPS.
         """
         async def log_fn(msg: str, pct: int):
             logger.info(f"[{project_id} | Muse Scene {scene_number}] {msg} ({pct}%)")
@@ -443,6 +459,7 @@ class MuseAutomator:
             return {"success": False, "error": f"Không tìm thấy dự án {project_id}"}
 
         pname = proj["name"] or "Sản phẩm tiện ích"
+        is_warehouse = _is_warehouse_product(pname)
 
         # Determine prompt
         cur = conn.execute("SELECT * FROM scripts WHERE project_id = ? AND is_selected = 1", (project_id,))
@@ -514,19 +531,23 @@ class MuseAutomator:
 
             pos_sigs = _get_distinctive_phrases(pname)
             neg_sigs = _get_excluded_signatures(pname)
-            target_slug = _slugify(pname)
 
-            # Record state before prompting to guarantee we only capture new generations
-            initial_counts = await page.evaluate("""() => {
-                const msgs = document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"]');
-                const wrappers = document.querySelectorAll('[data-hatch-video-wrapper="true"], [data-testid="hatch-chat-attachment-presentation-video"], video');
+            # Record strict boundary state BEFORE prompting:
+            # Captures exact message count and all existing video URLs currently in DOM!
+            initial_state = await page.evaluate("""() => {
+                const msgs = Array.from(document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"], [data-message-role]'));
+                const videos = Array.from(document.querySelectorAll('video, [data-hatch-video-wrapper]'));
+                const srcs = videos.map(v => {
+                    const vTag = v.tagName.toLowerCase() === 'video' ? v : v.querySelector('video');
+                    return v.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                }).filter(Boolean);
                 return {
                     msgCount: msgs.length,
-                    wrapperCount: wrappers.length
+                    knownSrcs: srcs
                 };
             }""")
-            init_msg_count = initial_counts.get("msgCount", 0)
-            init_wrapper_count = initial_counts.get("wrapperCount", 0)
+            init_msg_count = initial_state.get("msgCount", 0)
+            init_srcs = set(initial_state.get("knownSrcs", []))
 
             # Input Prompt into Muse AI Chat
             await log_fn(f"Đang chuẩn bị Prompt Cảnh {scene_number} cho '{pname}' vào Muse AI...", 40)
@@ -537,8 +558,7 @@ class MuseAutomator:
                 "div[contenteditable='true'], textarea"
             )
 
-            formatted_prompt = f"[Cảnh {scene_number} - {pname} | 9:16, 10s, 60fps] {scene_prompt}"
-            # Normalize whitespace/newlines to single line so Playwright doesn't prematurely trigger Enter
+            formatted_prompt = f"[{pname} - Cảnh {scene_number} | 9:16, 10s, 60fps] {scene_prompt}"
             formatted_prompt = " ".join(formatted_prompt.split())
 
             if prompt_input:
@@ -574,7 +594,6 @@ class MuseAutomator:
                         except Exception as e:
                             logger.warning(f"Failed to set reference image: {e}")
 
-                # Wait for attachment preview chip to confirm upload
                 for _ in range(15):
                     has_chip = await page.query_selector("button[aria-label='Gỡ file đính kèm']")
                     if has_chip:
@@ -595,14 +614,16 @@ class MuseAutomator:
 
             await asyncio.sleep(2)
 
-            # Step 3c: Wait for video generation (up to 300 seconds)
+            # Step 3c: Wait for video generation (up to 360 seconds / 6 minutes)
             await log_fn(f"Đang chờ Muse AI kết xuất video Cảnh {scene_number} (chuẩn 9:16 60 FPS)...", 60)
 
             downloaded = False
-            for attempt in range(100):
+            companion_candidate_src = None
+
+            for attempt in range(120):
                 await asyncio.sleep(3)
                 elapsed = (attempt + 1) * 3
-                current_pct = min(60 + int(attempt * 0.35), 94)
+                current_pct = min(60 + int(attempt * 0.28), 94)
 
                 # Keep bottom scrolled into view and auto-click unread messages button
                 await page.evaluate("""() => {
@@ -631,7 +652,10 @@ class MuseAutomator:
                 # Check if Muse is actively generating
                 is_muse_busy = await page.evaluate("""() => {
                     const stopBtn = document.querySelector("button[aria-label='Dừng']");
-                    const runningEl = Array.from(document.querySelectorAll('*')).find(e => (e.innerText || '').includes('Đang chạy:') || (e.innerText || '').includes('Đang tạo video'));
+                    const runningEl = Array.from(document.querySelectorAll('*')).find(e => {
+                        const t = (e.innerText || '');
+                        return t.includes('Đang chạy:') || t.includes('Đang tạo video') || t.includes('Đang dựng video') || t.includes('Generating video');
+                    });
                     return Boolean(stopBtn || runningEl);
                 }""")
                 if is_muse_busy:
@@ -639,21 +663,10 @@ class MuseAutomator:
                 else:
                     await log_fn(f"Muse AI đang dựng video Cảnh {scene_number} cho '{pname}' ({elapsed}s)...", current_pct)
 
-                # Look for newly generated video matching this scene and product
+                # Look STRICTLY in new messages generated AFTER init_msg_count
                 newest_video = await page.evaluate("""async (args) => {
-                    const { initMsgCount, sceneNum, posSigs, negSigs } = args;
-
-                    function normalize(str) {
-                        if (!str) return '';
-                        return str.toLowerCase()
-                            .replace(/đ/g, 'd')
-                            .replace(/Đ/g, 'd')
-                            .normalize('NFD')
-                            .replace(/[\\u0300-\\u036f]/g, '');
-                    }
-
-                    const normPosSigs = Array.from(new Set(posSigs.map(normalize).filter(s => s.length >= 3)));
-                    const normNegSigs = Array.from(new Set(negSigs.map(normalize).filter(s => s.length >= 3)));
+                    const { initMsgCount, knownSrcs, sceneNum } = args;
+                    const knownSet = new Set(knownSrcs || []);
 
                     function isAvatar(el) {
                         if (!el) return true;
@@ -668,126 +681,108 @@ class MuseAutomator:
                         return false;
                     }
 
-                    const items = Array.from(document.querySelectorAll('[data-message-item="true"], [data-message-role]'));
-                    if (!items.length) return null;
+                    const allItems = Array.from(document.querySelectorAll('[data-message-item="true"], [data-message-role]'));
+                    if (allItems.length <= initMsgCount) return null;
 
-                    // Group into turns
-                    const turns = [];
-                    let currentTurnId = null;
-                    let currentTurn = [];
+                    // STRICT BOUNDARY: ONLY inspect messages that appeared AFTER submitting prompt!
+                    const newItems = allItems.slice(initMsgCount);
 
-                    for (const it of items) {
-                        const turnId = it.getAttribute('data-message-turn-id') || it.getAttribute('data-message-group-id') || 'gen';
-                        if (turnId !== currentTurnId && currentTurn.length > 0) {
-                            turns.push({ turnId: currentTurnId, items: currentTurn });
-                            currentTurn = [];
-                        }
-                        currentTurnId = turnId;
-                        currentTurn.push(it);
-                    }
-                    if (currentTurn.length > 0) {
-                        turns.push({ turnId: currentTurnId, items: currentTurn });
-                    }
-
-                    // Scan turns backwards
-                    for (let t = turns.length - 1; t >= 0; t--) {
-                        const turn = turns[t];
-                        const turnTextRaw = turn.items.map(it => it.innerText || '').join(' ').toLowerCase();
-                        const turnTextNorm = normalize(turnTextRaw);
-
-                        const hasPos = normPosSigs.some(sig => turnTextNorm.includes(sig));
-                        if (!hasPos) continue;
-
-                        try { turn.items[0].scrollIntoView({ block: 'center' }); } catch (e) {}
-
-                        const turnVideos = [];
-                        const seenTurnSrcs = new Set();
-
-                        for (let idx = 0; idx < turn.items.length; idx++) {
-                            const it = turn.items[idx];
+                    for (const it of newItems) {
+                        if (it.querySelector('[role="status"], [data-slot="skeleton"], video, [data-hatch-video-wrapper]')) {
                             try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
-
-                            const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
-                            for (const el of rawVideos) {
-                                if (isAvatar(el)) continue;
-
-                                const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
-                                let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
-                                if (!src) {
-                                    const sourceTag = el.querySelector('source');
-                                    if (sourceTag) src = sourceTag.src;
-                                }
-                                if (!src) {
-                                    const aTag = el.querySelector('a[href*=".mp4"], a[href*="blob:"]');
-                                    if (aTag) src = aTag.href;
-                                }
-                                if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
-
-                                if (!seenTurnSrcs.has(src)) {
-                                    seenTurnSrcs.add(src);
-                                    let localText = (it.innerText || '');
-                                    let pNode = it.previousElementSibling;
-                                    let hops = 0;
-                                    while (pNode && hops < 2) {
-                                        localText = (pNode.innerText || '') + ' ' + localText;
-                                        if (pNode.querySelector('video, [data-hatch-video-wrapper]')) break;
-                                        pNode = pNode.previousElementSibling;
-                                        hops++;
-                                    }
-                                    const normLocal = normalize(localText);
-
-                                    // Strict anti-contamination
-                                    const hasOther = normNegSigs.some(sig => normLocal.includes(sig));
-                                    const hasThis = normPosSigs.some(sig => normLocal.includes(sig));
-                                    if (hasOther && !hasThis) continue;
-
-                                    turnVideos.push({
-                                        src,
-                                        localText: normLocal,
-                                        aria: el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || ''
-                                    });
-                                }
-                            }
                         }
+                    }
 
-                        if (!turnVideos.length) continue;
+                    const newVideos = [];
+                    const seenSrcs = new Set();
 
-                        for (let vIdx = 0; vIdx < turnVideos.length; vIdx++) {
-                            const tv = turnVideos[vIdx];
-                            const tText = tv.localText;
+                    for (const it of newItems) {
+                        const role = (it.getAttribute('data-message-role') || '').toLowerCase();
+                        if (role === 'user') continue;
 
-                            const isS2 = tText.includes('canh 2') || tText.includes('canh-2') || tText.includes('canh2') || tText.includes('chot don') || tText.includes('can canh');
-                            const isS1 = tText.includes('canh 1') || tText.includes('canh-1') || tText.includes('canh1') || tText.includes('hook') || tText.includes('gioi thieu');
+                        const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
+                        for (const el of rawVideos) {
+                            if (isAvatar(el)) continue;
 
-                            if (sceneNum === 2 && isS2) {
-                                return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
-                            } else if (sceneNum === 1 && isS1) {
-                                return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
-                            } else if (turnVideos.length === 2) {
-                                if (sceneNum === 1 && vIdx === 0) return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
-                                if (sceneNum === 2 && vIdx === 1) return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
-                            } else if (turnVideos.length === 1 && !isS2 && sceneNum === 1) {
-                                return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
-                            } else if (turnVideos.length === 1 && isS2 && sceneNum === 2) {
-                                return { src: tv.src, aria: tv.aria, text: turnTextRaw.substring(0, 100) };
+                            const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
+                            let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                            if (!src) {
+                                const sourceTag = el.querySelector('source');
+                                if (sourceTag) src = sourceTag.src;
+                            }
+                            if (!src) {
+                                const aTag = el.querySelector('a[href*=".mp4"], a[href*="blob:"]');
+                                if (aTag) src = aTag.href;
+                            }
+                            if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
+
+                            // STRICT RULE: Video MUST NOT exist before submitting prompt!
+                            if (knownSet.has(src)) continue;
+
+                            if (!seenSrcs.has(src)) {
+                                seenSrcs.add(src);
+
+                                let caption = '';
+                                let prev = el.previousElementSibling;
+                                while (prev && !prev.querySelector('video, [data-hatch-video-wrapper]')) {
+                                    caption = (prev.innerText || '') + ' ' + caption;
+                                    prev = prev.previousElementSibling;
+                                }
+                                if (!caption) caption = it.innerText || '';
+
+                                newVideos.push({
+                                    src,
+                                    caption: caption.toLowerCase(),
+                                    aria: el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || ''
+                                });
                             }
                         }
                     }
-                    return null;
+
+                    if (!newVideos.length) return null;
+
+                    // If Muse returned BOTH Scene 1 and Scene 2 together in this response:
+                    if (newVideos.length >= 2) {
+                        if (sceneNum === 1) {
+                            return {
+                                src: newVideos[0].src,
+                                companionSrc: newVideos[1].src,
+                                aria: newVideos[0].aria
+                            };
+                        } else {
+                            return {
+                                src: newVideos[1].src,
+                                companionSrc: newVideos[0].src,
+                                aria: newVideos[1].aria
+                            };
+                        }
+                    }
+
+                    // If only 1 video returned in new messages:
+                    const single = newVideos[0];
+                    const cap = single.caption;
+                    const isS2 = cap.includes('canh 2') || cap.includes('canh-2') || cap.includes('chot don') || cap.includes('can canh');
+                    const isS1 = cap.includes('canh 1') || cap.includes('canh-1') || cap.includes('hook') || cap.includes('gioi thieu');
+
+                    if (sceneNum === 2 && isS2) {
+                        return { src: single.src, aria: single.aria };
+                    } else if (sceneNum === 1 && isS1) {
+                        return { src: single.src, aria: single.aria };
+                    }
+
+                    return { src: single.src, aria: single.aria };
                 }""", {
                     "initMsgCount": init_msg_count,
-                    "sceneNum": scene_number,
-                    "posSigs": pos_sigs,
-                    "negSigs": neg_sigs
+                    "knownSrcs": list(init_srcs),
+                    "sceneNum": scene_number
                 })
 
                 if newest_video and newest_video.get("src"):
-                    await log_fn(f"Đã tạo xong video Cảnh {scene_number} trên Muse AI! Đang trích xuất video...", 92)
+                    await log_fn(f"Đã tạo xong video Cảnh {scene_number} mới nhất trên Muse AI! Đang trích xuất video...", 92)
                     if await self.download_blob_or_url(page, newest_video["src"], temp_down):
                         downloaded = True
+                        companion_candidate_src = newest_video.get("companionSrc")
                         break
-
-                await log_fn(f"Muse AI đang dựng video Cảnh {scene_number} cho '{pname}' ({elapsed}s)...", current_pct)
 
             if downloaded and temp_down.exists() and temp_down.stat().st_size > 20000:
                 await log_fn(f"Đang chuẩn hóa video Cảnh {scene_number} (1080x1920 @ 60 FPS)...", 95)
@@ -800,7 +795,6 @@ class MuseAutomator:
                 )
                 temp_down.unlink(missing_ok=True)
 
-                # Strict cross-contamination & internal duplicate check
                 if _is_duplicate_or_contaminated(target_file, project_id, scene_number):
                     logger.warning(f"Video {target_file} was rejected as duplicate or contaminated!")
                     target_file.unlink(missing_ok=True)
@@ -809,157 +803,46 @@ class MuseAutomator:
                         "message": "Phát hiện video không thuộc sản phẩm này (trùng lặp). Vui lòng thử lại để tạo video đúng sản phẩm."
                     }
 
-                # Check if the other scene was also generated in the same response with distinct source
-                try:
+                # Update current scene in DB
+                p_cur = await ffmpeg_service.probe_video(str(target_file))
+                c_db = _get_raw_conn()
+                c_db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, scene_number))
+                c_db.execute("""
+                    INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
+                    VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')
+                """, (f"v{scene_number}_{project_id[:4]}", project_id, scene_number, str(target_file), p_cur.get("duration", 10.0)))
+                c_db.commit()
+
+                # If companion video was also returned in this same response, process companion scene!
+                if companion_candidate_src and companion_candidate_src != newest_video.get("src"):
                     other_scene = 2 if scene_number == 1 else 1
                     other_file = target_dir / f"scene{other_scene}.mp4"
-                    if not other_file.exists() or other_file.stat().st_size < 10000:
-                        companion_video = await page.evaluate("""async (args) => {
-                            const { mainSrc, otherScene, posSigs, negSigs } = args;
+                    temp_other = target_dir / f"temp_muse_s{other_scene}.mp4"
+                    try:
+                        if await self.download_blob_or_url(page, companion_candidate_src, temp_other):
+                            await ffmpeg_service.standardize_scene_video(
+                                input_video_path=str(temp_other),
+                                output_video_path=str(other_file),
+                                target_width=1080,
+                                target_height=1920,
+                                target_fps=60
+                            )
+                            temp_other.unlink(missing_ok=True)
+                            if not _is_duplicate_or_contaminated(other_file, project_id, other_scene):
+                                p_other = await ffmpeg_service.probe_video(str(other_file))
+                                c_db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, other_scene))
+                                c_db.execute("""
+                                    INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
+                                    VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')
+                                """, (f"v{other_scene}_{project_id[:4]}", project_id, other_scene, str(other_file), p_other.get("duration", 10.0)))
+                                c_db.commit()
+                                logger.info(f"Companion Scene {other_scene} successfully downloaded and registered for {project_id}.")
+                            else:
+                                other_file.unlink(missing_ok=True)
+                    except Exception as comp_err:
+                        logger.debug(f"Companion extraction error: {comp_err}")
 
-                            function normalize(str) {
-                                if (!str) return '';
-                                return str.toLowerCase()
-                                    .replace(/đ/g, 'd')
-                                    .replace(/Đ/g, 'd')
-                                    .normalize('NFD')
-                                    .replace(/[\\u0300-\\u036f]/g, '');
-                            }
-
-                            const normPosSigs = Array.from(new Set(posSigs.map(normalize).filter(s => s.length >= 3)));
-                            const normNegSigs = Array.from(new Set(negSigs.map(normalize).filter(s => s.length >= 3)));
-
-                            function isAvatar(el) {
-                                if (!el) return true;
-                                if (el.closest('[class*="status-avatar"], [class*="rounded-full"], div[class*="avatar"]')) return true;
-                                const v = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
-                                if (v) {
-                                    if (v.videoWidth > 0 && v.videoWidth === v.videoHeight) return true;
-                                    if (v.duration > 0 && v.duration < 5.5) return true;
-                                    const vCls = v.className || '';
-                                    if (vCls.includes('rounded-full') || vCls.includes('avatar')) return true;
-                                }
-                                return false;
-                            }
-
-                            const items = Array.from(document.querySelectorAll('[data-message-item="true"], [data-message-role]'));
-                            if (!items.length) return null;
-
-                            // Group into turns
-                            const turns = [];
-                            let currentTurnId = null;
-                            let currentTurn = [];
-
-                            for (const it of items) {
-                                const turnId = it.getAttribute('data-message-turn-id') || it.getAttribute('data-message-group-id') || 'gen';
-                                if (turnId !== currentTurnId && currentTurn.length > 0) {
-                                    turns.push({ turnId: currentTurnId, items: currentTurn });
-                                    currentTurn = [];
-                                }
-                                currentTurnId = turnId;
-                                currentTurn.push(it);
-                            }
-                            if (currentTurn.length > 0) {
-                                turns.push({ turnId: currentTurnId, items: currentTurn });
-                            }
-
-                            for (let t = turns.length - 1; t >= 0; t--) {
-                                const turn = turns[t];
-                                const turnTextRaw = turn.items.map(it => it.innerText || '').join(' ').toLowerCase();
-                                const turnTextNorm = normalize(turnTextRaw);
-
-                                const hasPos = normPosSigs.some(sig => turnTextNorm.includes(sig));
-                                if (!hasPos) continue;
-
-                                try { turn.items[0].scrollIntoView({ block: 'center' }); } catch (e) {}
-
-                                const turnVideos = [];
-                                const seenTurnSrcs = new Set();
-
-                                for (let idx = 0; idx < turn.items.length; idx++) {
-                                    const it = turn.items[idx];
-                                    try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch (e) {}
-
-                                    const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
-                                    for (const el of rawVideos) {
-                                        if (isAvatar(el)) continue;
-
-                                        const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
-                                        let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
-                                        if (!src) {
-                                            const sourceTag = el.querySelector('source');
-                                            if (sourceTag) src = sourceTag.src;
-                                        }
-                                        if (!src) {
-                                            const aTag = el.querySelector('a[href*=".mp4"], a[href*="blob:"]');
-                                            if (aTag) src = aTag.href;
-                                        }
-                                        if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
-
-                                        if (!seenTurnSrcs.has(src) && src !== mainSrc) {
-                                            seenTurnSrcs.add(src);
-                                            let localText = (it.innerText || '');
-                                            let pNode = it.previousElementSibling;
-                                            let hops = 0;
-                                            while (pNode && hops < 2) {
-                                                localText = (pNode.innerText || '') + ' ' + localText;
-                                                if (pNode.querySelector('video, [data-hatch-video-wrapper]')) break;
-                                                pNode = pNode.previousElementSibling;
-                                                hops++;
-                                            }
-                                            const normLocal = normalize(localText);
-                                            const hasOther = normNegSigs.some(sig => normLocal.includes(sig));
-                                            const hasThis = normPosSigs.some(sig => normLocal.includes(sig));
-                                            if (hasOther && !hasThis) continue;
-
-                                            turnVideos.push({ src, localText: normLocal, aria: el.getAttribute('aria-label') || '' });
-                                        }
-                                    }
-                                }
-
-                                if (turnVideos.length > 0) {
-                                    for (const tv of turnVideos) {
-                                        const tText = tv.localText;
-                                        const isExplicitOther = otherScene === 1 
-                                            ? (tText.includes('canh 1') || tText.includes('canh-1') || tText.includes('hook') || tText.includes('gioi thieu'))
-                                            : (tText.includes('canh 2') || tText.includes('canh-2') || tText.includes('chot don') || tText.includes('can canh'));
-                                        if (isExplicitOther || turnVideos.length === 1) {
-                                            return { src: tv.src, aria: tv.aria };
-                                        }
-                                    }
-                                    return { src: turnVideos[0].src, aria: turnVideos[0].aria };
-                                }
-                            }
-                            return null;
-                        }""", {"mainSrc": newest_video.get("src"), "otherScene": other_scene, "posSigs": pos_sigs, "negSigs": neg_sigs})
-
-
-                        if companion_video and companion_video.get("src"):
-                            temp_other = target_dir / f"temp_muse_s{other_scene}.mp4"
-                            if await self.download_blob_or_url(page, companion_video["src"], temp_other):
-                                await ffmpeg_service.standardize_scene_video(
-                                    input_video_path=str(temp_other),
-                                    output_video_path=str(other_file),
-                                    target_width=1080,
-                                    target_height=1920,
-                                    target_fps=60
-                                )
-                                temp_other.unlink(missing_ok=True)
-                                if _is_duplicate_or_contaminated(other_file, project_id, other_scene):
-                                    logger.warning(f"Companion video {other_file} was rejected as duplicate or contaminated!")
-                                    other_file.unlink(missing_ok=True)
-                                else:
-                                    p_other = await ffmpeg_service.probe_video(str(other_file))
-                                    c_db = _get_raw_conn()
-                                    c_db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, other_scene))
-                                    c_db.execute("""
-                                        INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
-                                        VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')
-                                    """, (f"v{other_scene}_{project_id[:4]}", project_id, other_scene, str(other_file), p_other.get("duration", 10.0)))
-                                    c_db.commit()
-                                    c_db.close()
-                except Exception as comp_ex:
-                    logger.debug(f"Companion scene check error: {comp_ex}")
+                c_db.close()
 
                 await log_fn(f"Hoàn thành xuất sắc video Cảnh {scene_number} chuẩn TikTok Affiliate!", 100)
                 return {
@@ -969,33 +852,9 @@ class MuseAutomator:
                     "engine": "muse_ai"
                 }
 
-            # If still not ready after timeout, check chat scan strictly one final time
-            final_scan = await self.scan_chat_for_project_videos(page, pname)
-            target_scene_key = f"scene{scene_number}"
-            if final_scan.get(target_scene_key) and final_scan[target_scene_key].get("src"):
-                src = final_scan[target_scene_key]["src"]
-                if await self.download_blob_or_url(page, src, temp_down):
-                    await ffmpeg_service.standardize_scene_video(
-                        input_video_path=str(temp_down),
-                        output_video_path=str(target_file),
-                        target_width=1080,
-                        target_height=1920,
-                        target_fps=60
-                    )
-                    temp_down.unlink(missing_ok=True)
-                    if not _is_duplicate_or_contaminated(target_file, project_id, scene_number):
-                        return {
-                            "success": True,
-                            "video_path": str(target_file),
-                            "scene_number": scene_number,
-                            "engine": "muse_ai"
-                        }
-                    else:
-                        target_file.unlink(missing_ok=True)
-
             return {
                 "success": False,
-                "message": f"Muse AI chưa kết xuất xong video trực tiếp sau 300s. Bạn có thể bấm 'Lấy Video từ Muse AI' trên giao diện sau khi Muse AI hoàn tất."
+                "message": f"Muse AI chưa kết xuất xong video trực tiếp sau 360s. Vui lòng bấm 'Lấy Video từ Muse AI' trên giao diện sau khi Muse AI hoàn tất."
             }
 
         except Exception as e:
