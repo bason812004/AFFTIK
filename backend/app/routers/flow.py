@@ -350,6 +350,21 @@ async def upload_manual_video(
         "message": f"Đã nạp thành công Video Cảnh {scene_number}!"
     }
 
+def _calc_file_hash(p: Path) -> str:
+    import hashlib
+    try:
+        h = hashlib.md5()
+        with open(p, "rb") as fp:
+            h.update(fp.read(65536))
+            sz = p.stat().st_size
+            if sz > 131072:
+                fp.seek(sz - 65536)
+                h.update(fp.read(65536))
+        return h.hexdigest()
+    except Exception:
+        return ""
+
+
 @router.post("/paste-clipboard-video")
 async def paste_clipboard_video(
     project_id: str = Body(..., embed=True),
@@ -358,6 +373,7 @@ async def paste_clipboard_video(
 ):
     """
     Reads a copied video file (or file path) directly from Windows Clipboard and imports it into Scene 1 or Scene 2.
+    Strictly verifies that clipboard actually contains a video file, and guards against duplicate/identical scenes.
     """
     import subprocess
     import shutil
@@ -380,25 +396,28 @@ async def paste_clipboard_video(
     if clip_val and os.path.isfile(clip_val) and clip_val.lower().endswith((".mp4", ".mov", ".webm", ".mkv")):
         chosen_file = Path(clip_val)
 
-    if not chosen_file:
-        # Fallback: automatically pick the newest downloaded .mp4 from Downloads if downloaded recently (< 30 mins)
-        import time
-        recents = await get_recent_videos()
-        if recents:
-            # Check if Scene 1 already used the very first file and we are pasting Scene 2
-            idx = 0
-            if scene_number == 2 and len(recents) >= 2:
-                # If top 2 files were downloaded within 5 minutes of each other, pick the other one if needed
-                if abs(recents[0]["mtime"] - recents[1]["mtime"]) < 300:
-                    idx = 0
-            if (time.time() - recents[idx]["mtime"]) < 1800:
-                chosen_file = Path(recents[idx]["path"])
-
     if not chosen_file or not chosen_file.exists():
         raise HTTPException(
             status_code=400,
-            detail="Không tìm thấy tệp video (.mp4) trong Clipboard hoặc thư mục Downloads gần đây. Bạn hãy Copy file video trong máy tính (Ctrl+C) hoặc Chọn file trực tiếp."
+            detail="Không tìm thấy tệp video (.mp4) nào trong Clipboard. Vui lòng bấm chuột phải vào file video chọn Copy (Ctrl+C) trên máy tính rồi bấm Dán lại, hoặc dùng nút 'Chọn Video Cảnh' / Kéo thả."
         )
+
+    # Strictly verify against companion scene to prevent identical duplicate videos
+    other_scene = 2 if scene_number == 1 else 1
+    other_path = PROJECTS_DIR / project_id / "videos" / f"scene{other_scene}.mp4"
+    if other_path.exists() and other_path.stat().st_size > 10000:
+        if chosen_file.stat().st_size == other_path.stat().st_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Video vừa dán có dung lượng ({chosen_file.stat().st_size} bytes) trùng khớp 100% với Video Cảnh {other_scene}! Không được dùng video trùng lặp. Vui lòng copy video riêng biệt cho Cảnh {scene_number}."
+            )
+        h_cand = _calc_file_hash(chosen_file)
+        h_other = _calc_file_hash(other_path)
+        if h_cand and h_cand == h_other:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Nội dung video vừa dán trùng khớp 100% với Video Cảnh {other_scene}! Vui lòng copy đúng video riêng của Cảnh {scene_number}."
+            )
 
     videos_dir = PROJECTS_DIR / project_id / "videos"
     videos_dir.mkdir(parents=True, exist_ok=True)
@@ -482,34 +501,67 @@ async def import_flow_video(
     """
     Imports a video file into the project, standardizes it to 1080x1920 @ 60 FPS,
     adds TTS speech audio if needed, and updates the project's scene video.
+    Guarantees strict product matching and prevents identical duplicate scenes.
     """
     import time
-    chosen_file = None
-    if source_path and os.path.exists(source_path):
-        chosen_file = Path(source_path)
-    else:
-        recents = await get_recent_videos()
-        # Only auto-pick if recently downloaded within the last 15 minutes
-        if recents and (time.time() - recents[0]["mtime"]) < 900:
-            chosen_file = Path(recents[0]["path"])
-        else:
-            # Try pulling directly from the active Google Flow browser tab!
-            pulled_path = await flow_automator.pull_latest_video_from_flow(project_id, scene_number)
-            if pulled_path and os.path.exists(pulled_path):
-                chosen_file = Path(pulled_path)
-
-    if not chosen_file or not chosen_file.exists():
-        raise HTTPException(
-            status_code=400,
-            detail="Vui lòng chọn tệp video cần nạp từ thư mục Tải về (Downloads)."
-        )
-
     p_cursor = await db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
     project = await p_cursor.fetchone()
     if not project:
         raise HTTPException(status_code=404, detail="Không tìm thấy dự án")
 
     p_dict = dict(project)
+    pname = p_dict.get("name") or ""
+
+    chosen_file = None
+    if source_path and os.path.exists(source_path):
+        chosen_file = Path(source_path)
+    else:
+        # Check active Google Flow browser tab first
+        pulled_path = await flow_automator.pull_latest_video_from_flow(project_id, scene_number)
+        if pulled_path and os.path.exists(pulled_path):
+            chosen_file = Path(pulled_path)
+        else:
+            # Filter Downloads by project keywords to avoid cross-product contamination
+            recents = await get_recent_videos()
+            from backend.app.services.muse_automator import _get_distinctive_phrases, _slugify
+            pos_words = _get_distinctive_phrases(pname)
+            other_scene = 2 if scene_number == 1 else 1
+            other_path = PROJECTS_DIR / project_id / "videos" / f"scene{other_scene}.mp4"
+            other_hash = _calc_file_hash(other_path) if other_path.exists() else None
+
+            matching_cands = []
+            for r in recents:
+                # Must be downloaded within 30 minutes
+                if (time.time() - r["mtime"]) > 1800:
+                    continue
+                c_p = Path(r["path"])
+                # Exclude if identical to other scene
+                if other_path.exists():
+                    if c_p.stat().st_size == other_path.stat().st_size or _calc_file_hash(c_p) == other_hash:
+                        continue
+                # Check keyword match
+                fn_norm = _slugify(r["filename"])
+                if any(_slugify(w) in fn_norm for w in pos_words if len(w) >= 3):
+                    matching_cands.append(c_p)
+
+            if matching_cands:
+                chosen_file = matching_cands[0]
+
+    if not chosen_file or not chosen_file.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Không tìm thấy file video phù hợp với '{pname}' trong thư mục Downloads. Vui lòng tải video về máy hoặc chọn file trực tiếp bằng nút 'Chọn Video Cảnh {scene_number}'."
+        )
+
+    # Strictly verify against companion scene to prevent identical duplicate videos
+    other_scene = 2 if scene_number == 1 else 1
+    other_path = PROJECTS_DIR / project_id / "videos" / f"scene{other_scene}.mp4"
+    if other_path.exists() and other_path.stat().st_size > 10000:
+        if chosen_file.stat().st_size == other_path.stat().st_size or _calc_file_hash(chosen_file) == _calc_file_hash(other_path):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Video vừa nạp ({chosen_file.name}) trùng khớp 100% với Video Cảnh {other_scene}! Vui lòng chọn đúng file video riêng biệt cho Cảnh {scene_number}."
+            )
     script_id = p_dict.get("selected_script_id")
     if script_id:
         s_cursor = await db.execute("SELECT * FROM scripts WHERE id = ?", (script_id,))

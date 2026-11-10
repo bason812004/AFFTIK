@@ -550,14 +550,16 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
   }, [studioMode, activeTab, effectiveId, onProjectCreated]);
 
   // Stepper calculations
+  const stepHasS1 = Boolean(project?.videos && project.videos.some((v: any) => v.scene_number === 1));
+  const stepHasS2 = Boolean(project?.videos && project.videos.some((v: any) => v.scene_number === 2));
   const steps = [
     { id: 1, label: 'Tạo dự án', done: true },
     { id: 2, label: 'Ảnh sản phẩm', done: !!project?.original_image_path },
     { id: 3, label: 'Nhân vật AI', done: !!project?.primary_character_image_path },
     { id: 4, label: 'Prompt & Kịch bản', done: project?.scripts && project.scripts.length > 0 },
-    { id: 5, label: 'Video Cảnh 1', done: project?.videos && project.videos.some((v: any) => v.scene_number === 1) },
-    { id: 6, label: 'Video Cảnh 2', done: project?.videos && project.videos.some((v: any) => v.scene_number === 2) },
-    { id: 7, label: 'Ghép Video Hoàn Thành', done: !!project?.export },
+    { id: 5, label: 'Video Cảnh 1', done: stepHasS1 },
+    { id: 6, label: 'Video Cảnh 2', done: stepHasS2 },
+    { id: 7, label: 'Ghép Video Hoàn Thành', done: !!project?.export && stepHasS1 && stepHasS2 },
   ];
 
   // Female Model Master Prompt (Chuẩn 9 phần)
@@ -3146,7 +3148,20 @@ Không sai sản phẩm, không đổi thiết kế, không đổi màu, không 
             </div>
 
             {/* FINAL STITCHED VIDEO RESULT RIGHT INSIDE MANUAL FLOW */}
-            {project.export && (
+            {project.export && !hasBothVideos && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <span>⚠️ Video ghép cũ trước đó không hợp lệ do thiếu Video Cảnh 2. Hệ thống yêu cầu phải có đủ 2 cảnh riêng biệt mới được ghép. Vui lòng tạo Cảnh 2 rồi bấm Ghép lại.</span>
+                <button
+                  type="button"
+                  onClick={handleDeleteExportVideo}
+                  disabled={deletingExport}
+                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold shrink-0 text-xs"
+                >
+                  Xóa Video Ghép Lỗi
+                </button>
+              </div>
+            )}
+            {project.export && hasBothVideos && (
               <div className="p-6 rounded-2xl bg-gradient-to-br from-emerald-950/30 via-[#12161f] to-[#181d29] border-2 border-emerald-500/50 space-y-5">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#232a3b] pb-4">
                   <div className="flex items-center gap-3">
@@ -4450,7 +4465,20 @@ Không sai sản phẩm, không đổi thiết kế, không đổi màu, không 
           </button>
 
           {/* Finished Stitched Video Player */}
-          {project.export && (
+          {project.export && !hasBothVideos && (
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+              <span>⚠️ Video ghép trước đó không hợp lệ do thiếu Video Cảnh 2. Hệ thống bắt buộc phải có đủ 2 cảnh riêng biệt mới được ghép hoàn chỉnh. Vui lòng tạo Cảnh 2 trước.</span>
+              <button
+                type="button"
+                onClick={handleDeleteExportVideo}
+                disabled={deletingExport}
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold shrink-0 text-xs"
+              >
+                Xóa Video Ghép Lỗi
+              </button>
+            </div>
+          )}
+          {project.export && hasBothVideos && (
             <div className="p-6 rounded-2xl bg-gradient-to-br from-[#181d29] to-[#12161f] border border-emerald-500/40 space-y-6 shadow-2xl">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#232a3b] pb-4">
                 <div className="flex items-center gap-3">

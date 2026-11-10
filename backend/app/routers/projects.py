@@ -82,7 +82,7 @@ async def list_projects(db = Depends(get_db)):
 
         is_running_now = (pid == running_pid) and not global_paused and (pid not in paused_ids)
         is_requeued_from_start = (pid in force_regen_ids) and (pid not in done_ids)
-        has_valid_export = raw_has_export and not is_running_now and not is_requeued_from_start and (v_count >= 2 or p.get("status") == "completed")
+        has_valid_export = raw_has_export and not is_running_now and not is_requeued_from_start and v_count >= 2
 
         in_queue = (pid in pending_list) and not global_paused and (pid not in paused_ids) and not has_valid_export and not is_running_now
         is_paused = (
@@ -951,15 +951,32 @@ async def get_project(project_id: str, db = Depends(get_db)):
             videos.append(v)
     project["videos"] = videos
     
-    # Get export (only if file exists on disk)
+    # STRICT CHECK: Export is ONLY valid if BOTH Scene 1 and Scene 2 genuinely exist (>10KB)!
+    has_scene1 = any(v.get("scene_number") == 1 and v.get("file_size", 0) > 10000 for v in project.get("videos", []))
+    has_scene2 = any(v.get("scene_number") == 2 and v.get("file_size", 0) > 10000 for v in project.get("videos", []))
+    has_both_scenes = has_scene1 and has_scene2
+
+    # Get export (only if both scenes exist and export file exists on disk)
     e_cursor = await db.execute("SELECT * FROM exports WHERE project_id = ? ORDER BY created_at DESC LIMIT 1", (project_id,))
     e_row = await e_cursor.fetchone()
     if e_row:
         exp_dict = dict(e_row)
         exp_path = exp_dict.get("final_video_path") or exp_dict.get("file_path")
-        if exp_path and os.path.exists(exp_path) and os.path.getsize(exp_path) > 1000:
+        if exp_path and os.path.exists(exp_path) and os.path.getsize(exp_path) > 1000 and has_both_scenes:
             project["export"] = exp_dict
         else:
+            # Purge invalid orphan export record where Scene 2 was missing
+            if not has_both_scenes:
+                if exp_path and os.path.exists(exp_path):
+                    try:
+                        os.unlink(exp_path)
+                    except Exception:
+                        pass
+                await db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
+                if project.get("status") == "completed":
+                    new_st = "video1_ready" if has_scene1 else "scripts_created"
+                    await db.execute("UPDATE projects SET status = ? WHERE id = ?", (new_st, project_id))
+                await db.commit()
             project["export"] = None
     else:
         project["export"] = None

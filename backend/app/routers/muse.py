@@ -47,7 +47,8 @@ async def generate_muse_video(
 async def upload_manual_video(
     project_id: str = Form(...),
     scene_number: int = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    db = Depends(get_db)
 ):
     if scene_number not in [1, 2]:
         raise HTTPException(status_code=400, detail="scene_number chỉ có thể là 1 hoặc 2")
@@ -60,6 +61,24 @@ async def upload_manual_video(
     with open(temp_path, "wb") as f:
         content = await file.read()
         f.write(content)
+
+    # Check companion scene to prevent identical duplicate videos
+    other_scene = 2 if scene_number == 1 else 1
+    other_path = target_dir / f"scene{other_scene}.mp4"
+    if other_path.exists() and other_path.stat().st_size > 10000:
+        import hashlib
+        def _fhash(p: Path):
+            h = hashlib.md5()
+            with open(p, "rb") as fp:
+                h.update(fp.read(65536))
+            return h.hexdigest()
+
+        if temp_path.stat().st_size == other_path.stat().st_size or _fhash(temp_path) == _fhash(other_path):
+            temp_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Video vừa tải lên trùng khớp 100% với Video Cảnh {other_scene}! Không được dùng video trùng lặp. Vui lòng chọn file video riêng biệt cho Cảnh {scene_number}."
+            )
 
     std_res = await ffmpeg_service.standardize_scene_video(
         input_video_path=str(temp_path),
@@ -76,6 +95,18 @@ async def upload_manual_video(
         temp_path.unlink(missing_ok=True)
     except Exception:
         pass
+
+    probe = await ffmpeg_service.probe_video(str(target_path))
+    v_id = str(uuid.uuid4())[:8]
+    await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, scene_number))
+    await db.execute("""
+        INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
+        VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')
+    """, (v_id, project_id, scene_number, str(target_path), probe.get("duration", 10.0)))
+
+    new_st = 'video1_ready' if scene_number == 1 else 'video2_ready'
+    await db.execute("UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_st, project_id))
+    await db.commit()
 
     return {
         "success": True,

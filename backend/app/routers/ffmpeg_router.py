@@ -50,26 +50,22 @@ async def stitch_videos(req: StitchRequest, db = Depends(get_db)):
 
     p_dict = dict(project)
     
-    # Locate Scene 1 and Scene 2 videos
-    v1_path = PROJECTS_DIR / req.project_id / "videos" / "scene1.mp4"
-    v2_path = PROJECTS_DIR / req.project_id / "videos" / "scene2.mp4"
+    # Strictly verify both Scene 1 and Scene 2 exist in database and on disk
+    c1 = await db.execute("SELECT video_path FROM videos WHERE project_id = ? AND scene_number = 1 ORDER BY created_at DESC LIMIT 1", (req.project_id,))
+    r1 = await c1.fetchone()
+    c2 = await db.execute("SELECT video_path FROM videos WHERE project_id = ? AND scene_number = 2 ORDER BY created_at DESC LIMIT 1", (req.project_id,))
+    r2 = await c2.fetchone()
 
-    if not v1_path.exists():
-        c1 = await db.execute("SELECT video_path FROM videos WHERE project_id = ? AND scene_number = 1 ORDER BY created_at DESC LIMIT 1", (req.project_id,))
-        r1 = await c1.fetchone()
-        if r1 and r1["video_path"] and os.path.exists(r1["video_path"]):
-            v1_path = Path(r1["video_path"])
+    v1_str = r1["video_path"] if r1 and r1["video_path"] else str(PROJECTS_DIR / req.project_id / "videos" / "scene1.mp4")
+    v2_str = r2["video_path"] if r2 and r2["video_path"] else str(PROJECTS_DIR / req.project_id / "videos" / "scene2.mp4")
 
-    if not v2_path.exists():
-        c2 = await db.execute("SELECT video_path FROM videos WHERE project_id = ? AND scene_number = 2 ORDER BY created_at DESC LIMIT 1", (req.project_id,))
-        r2 = await c2.fetchone()
-        if r2 and r2["video_path"] and os.path.exists(r2["video_path"]):
-            v2_path = Path(r2["video_path"])
+    v1_path = Path(v1_str)
+    v2_path = Path(v2_str)
 
-    if not v1_path.exists():
-        raise HTTPException(status_code=400, detail="Chưa có Video Cảnh 1 trong dự án. Vui lòng nạp hoặc tạo Video Cảnh 1 trước.")
-    if not v2_path.exists():
-        raise HTTPException(status_code=400, detail="Chưa có Video Cảnh 2 trong dự án. Vui lòng nạp hoặc tạo Video Cảnh 2 trước.")
+    if not r1 or not v1_path.exists() or v1_path.stat().st_size < 10000:
+        raise HTTPException(status_code=400, detail="Chưa có Video Cảnh 1 trong dự án. Vui lòng nạp hoặc tạo Video Cảnh 1 trước khi ghép!")
+    if not r2 or not v2_path.exists() or v2_path.stat().st_size < 10000:
+        raise HTTPException(status_code=400, detail="Chưa có Video Cảnh 2 trong dự án. Bắt buộc phải có đủ 2 cảnh video riêng biệt mới có thể ghép!")
 
     # Guard against identical duplicate scene videos
     if v1_path.stat().st_size == v2_path.stat().st_size:

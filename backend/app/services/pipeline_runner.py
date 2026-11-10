@@ -1284,25 +1284,8 @@ class PipelineRunner:
                                 logger.warning(f"Muse retry 1 failed: {ex_retry}")
 
                     if not v1_path:
-                        # Auto-fallback: Never freeze the tool! Create high quality 60 FPS motion video
-                        await update_status("Tạo video Cảnh 1", 72, "Muse AI chưa trả video, tự động chuyển sang bộ kết xuất chuyển động 60 FPS...")
-                        synth_path = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
-                        await ffmpeg_service.create_scene_motion_video(
-                            image_path=char_image_path or original_image,
-                            output_path=synth_path,
-                            duration=10.0,
-                            motion_type="zoom_in",
-                            dialogue_text=script_dict.get("scene1_dialogue", "") or f"Giới thiệu {project.get('name', 'sản phẩm')}",
-                            fps=60
-                        )
-                        if not os.path.exists(synth_path) or os.path.getsize(synth_path) < 1000:
-                            await ffmpeg_service.create_image_video(
-                                image_path=char_image_path or original_image,
-                                output_path=synth_path,
-                                duration=10.0,
-                                fps=60
-                            )
-                        v1_path = synth_path
+                        await update_status("Chờ Cảnh 1", 72, "Muse AI chưa tạo xong video Cảnh 1. Vui lòng bấm 'Lấy Video từ Muse AI' hoặc tạo lại Cảnh 1...", status="failed")
+                        return {"success": False, "error": "Chưa có video Cảnh 1 từ Muse AI."}
 
                 probe1 = await ffmpeg_service.probe_video(v1_path)
                 v1_id = str(uuid.uuid4())[:8]
@@ -1417,25 +1400,8 @@ class PipelineRunner:
                                 logger.warning(f"Muse retry 2 failed: {ex_retry2}")
 
                     if not v2_path:
-                        # Auto-fallback: Never freeze the tool! Create high quality 60 FPS closeup on product
-                        await update_status("Tạo video Cảnh 2", 88, "Muse AI chưa trả video, tự động kết xuất video cận cảnh sản phẩm 60 FPS...")
-                        synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
-                        await ffmpeg_service.create_scene_motion_video(
-                            image_path=original_image or char_image_path,
-                            output_path=synth_path2,
-                            duration=10.0,
-                            motion_type="closeup",
-                            dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
-                            fps=60
-                        )
-                        if not os.path.exists(synth_path2) or os.path.getsize(synth_path2) < 1000:
-                            await ffmpeg_service.create_image_video(
-                                image_path=original_image or char_image_path,
-                                output_path=synth_path2,
-                                duration=10.0,
-                                fps=60
-                            )
-                        v2_path = synth_path2
+                        await update_status("Chờ Cảnh 2", 84, "Muse AI chưa tạo xong video Cảnh 2. Hệ thống dừng chờ Cảnh 2 hoàn tất (tuyệt đối không ghép khi thiếu Cảnh 2)!", status="failed")
+                        return {"success": False, "error": "Chưa lấy được video Cảnh 2 từ Muse AI."}
 
                 probe2 = await ffmpeg_service.probe_video(v2_path)
                 v2_id = str(uuid.uuid4())[:8]
@@ -1457,104 +1423,84 @@ class PipelineRunner:
             # =========================================================================
             # STEP 6: FFMPEG STITCHING & EXPORT (88% -> 100%)
             # =========================================================================
-            if not v1_path or not os.path.exists(v1_path):
-                synth_path1 = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
-                await ffmpeg_service.create_scene_motion_video(
-                    image_path=char_image_path or original_image,
-                    output_path=synth_path1,
-                    duration=10.0,
-                    motion_type="zoom_in",
-                    dialogue_text=script_dict.get("scene1_dialogue", "") or f"Giới thiệu {project.get('name', 'sản phẩm')}",
-                    fps=60
-                )
-                v1_path = synth_path1
+            # STRICT CHECK: Both Scene 1 and Scene 2 MUST exist as real video files.
+            # Never stitch when Scene 2 is missing, and never synthesize fake photo-videos!
+            if not v1_path or not os.path.exists(v1_path) or not v2_path or not os.path.exists(v2_path):
+                missing = []
+                if not v1_path or not os.path.exists(v1_path):
+                    missing.append("Cảnh 1")
+                if not v2_path or not os.path.exists(v2_path):
+                    missing.append("Cảnh 2")
+                missing_str = " và ".join(missing)
+                msg = f"Dự án chưa có video {missing_str}. Tuyệt đối không ghép video khi thiếu cảnh! Hệ thống tạm dừng chờ hoàn tất {missing_str}."
+                await update_status("Chưa đủ 2 cảnh", 85, msg, status="failed")
+                return {"success": False, "error": msg}
 
-            if not v2_path or not os.path.exists(v2_path):
-                synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
-                await ffmpeg_service.create_scene_motion_video(
-                    image_path=char_image_path or original_image,
-                    output_path=synth_path2,
-                    duration=10.0,
-                    motion_type="closeup",
-                    dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
-                    fps=60
-                )
-                v2_path = synth_path2
-
-            if v1_path and v2_path and os.path.exists(v1_path) and os.path.exists(v2_path):
-                # Guard against identical duplicate scene videos
-                import hashlib
-                def _calc_sample_hash(p: str) -> str:
-                    try:
-                        h = hashlib.md5()
-                        with open(p, "rb") as fp:
+            # Guard against identical duplicate scene videos
+            import hashlib
+            def _calc_sample_hash(p: str) -> str:
+                try:
+                    h = hashlib.md5()
+                    with open(p, "rb") as fp:
+                        h.update(fp.read(65536))
+                        sz = os.path.getsize(p)
+                        if sz > 131072:
+                            fp.seek(sz - 65536)
                             h.update(fp.read(65536))
-                            sz = os.path.getsize(p)
-                            if sz > 131072:
-                                fp.seek(sz - 65536)
-                                h.update(fp.read(65536))
-                        return h.hexdigest()
-                    except Exception:
-                        return ""
+                    return h.hexdigest()
+                except Exception:
+                    return ""
 
-                is_internal_dup = (os.path.getsize(v1_path) == os.path.getsize(v2_path))
-                if not is_internal_dup and abs(os.path.getsize(v1_path) - os.path.getsize(v2_path)) < 50000:
-                    h1 = _calc_sample_hash(v1_path)
-                    h2 = _calc_sample_hash(v2_path)
-                    if h1 and h1 == h2:
-                        is_internal_dup = True
+            is_internal_dup = (os.path.getsize(v1_path) == os.path.getsize(v2_path))
+            if not is_internal_dup and abs(os.path.getsize(v1_path) - os.path.getsize(v2_path)) < 50000:
+                h1 = _calc_sample_hash(v1_path)
+                h2 = _calc_sample_hash(v2_path)
+                if h1 and h1 == h2:
+                    is_internal_dup = True
 
-                if is_internal_dup:
-                    logger.warning(f"Detected duplicate scene videos for {project_id}! Scene 1 and Scene 2 have identical content. Regenerating distinct Scene 2...")
+            if is_internal_dup:
+                logger.warning(f"Detected duplicate scene videos for {project_id}! Scene 1 and Scene 2 have identical content.")
+                try:
+                    os.unlink(v2_path)
+                except Exception:
+                    pass
+                v2_path = None
+                await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
+                await db.commit()
+
+                if video_engine == "muse":
+                    await update_status("Tạo video Cảnh 2", 80, "Phát hiện Cảnh 2 trùng Cảnh 1, đang yêu cầu Muse AI tạo lại Cảnh 2 riêng biệt...")
                     try:
-                        os.unlink(v2_path)
-                    except Exception:
-                        pass
-                    v2_path = None
-                    await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
-                    await db.commit()
-
-                    if video_engine == "muse":
-                        await update_status("Tạo video Cảnh 2", 80, "Phát hiện Cảnh 2 trùng Cảnh 1, đang gửi yêu cầu tạo riêng Cảnh 2 cận cảnh trên Muse AI...")
-                        try:
-                            v2_retry = await muse_automator.generate_scene_video(
-                                project_id=project_id,
-                                scene_number=2,
-                                prompt=scene2_prompt,
-                                character_image_path=char_image_path or original_image,
-                                reference_image_path=original_image or char_image_path,
-                                progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(80 + (p * 0.08)), m)
-                            )
-                            if v2_retry.get("success") and v2_retry.get("video_path") and os.path.exists(v2_retry["video_path"]):
-                                if os.path.getsize(v2_retry["video_path"]) != os.path.getsize(v1_path):
-                                    v2_path = v2_retry["video_path"]
-                        except Exception as ex_m2:
-                            logger.warning(f"Muse distinct Scene 2 retry error: {ex_m2}")
-
-                    if not v2_path:
-                        # Regenerate Scene 2 with distinct closeup on product
-                        synth_path2 = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
-                        await ffmpeg_service.create_scene_motion_video(
-                            image_path=original_image or char_image_path,
-                            output_path=synth_path2,
-                            duration=10.0,
-                            motion_type="closeup",
-                            dialogue_text=script_dict.get("scene2_dialogue", "") or f"Chi tiết {project.get('name', 'sản phẩm')}",
-                            fps=60
+                        v2_retry = await muse_automator.generate_scene_video(
+                            project_id=project_id,
+                            scene_number=2,
+                            prompt=scene2_prompt,
+                            character_image_path=char_image_path or original_image,
+                            reference_image_path=original_image or char_image_path,
+                            progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(80 + (p * 0.08)), m)
                         )
-                        v2_path = synth_path2
+                        if v2_retry.get("success") and v2_retry.get("video_path") and os.path.exists(v2_retry["video_path"]):
+                            if os.path.getsize(v2_retry["video_path"]) != os.path.getsize(v1_path):
+                                v2_path = v2_retry["video_path"]
+                    except Exception as ex_m2:
+                        logger.warning(f"Muse distinct Scene 2 retry error: {ex_m2}")
 
-                    probe2 = await ffmpeg_service.probe_video(v2_path)
-                    v2_id = str(uuid.uuid4())[:8]
-                    await db.execute("""
-                        INSERT INTO videos (id, project_id, script_id, scene_number, video_path, duration, resolution, fps, status)
-                        VALUES (?, ?, ?, 2, ?, ?, ?, ?, 'ready')
-                    """, (
-                        v2_id, project_id, script_dict.get("id"), v2_path,
-                        probe2.get("duration", 10.0), f"{probe2.get('width', 1080)}x{probe2.get('height', 1920)}",
-                        probe2.get("fps", 60.0)
-                    ))
-                    await db.commit()
+                if not v2_path or not os.path.exists(v2_path):
+                    msg = "Phát hiện Video Cảnh 2 trùng lặp với Cảnh 1. Hệ thống đã xóa Cảnh 2 trùng và tạm dừng để chờ tạo video Cảnh 2 mới, không ghép lặp hình!"
+                    await update_status("Chờ Cảnh 2 riêng biệt", 85, msg, status="failed")
+                    return {"success": False, "error": msg}
+
+                probe2 = await ffmpeg_service.probe_video(v2_path)
+                v2_id = str(uuid.uuid4())[:8]
+                await db.execute("""
+                    INSERT INTO videos (id, project_id, script_id, scene_number, video_path, duration, resolution, fps, status)
+                    VALUES (?, ?, ?, 2, ?, ?, ?, ?, 'ready')
+                """, (
+                    v2_id, project_id, script_dict.get("id"), v2_path,
+                    probe2.get("duration", 10.0), f"{probe2.get('width', 1080)}x{probe2.get('height', 1920)}",
+                    probe2.get("fps", 60.0)
+                ))
+                await db.commit()
 
                 await update_status("Ghép video FFmpeg", 92, "Đang xử lý chuẩn hóa 1080x1920 @ 60fps và ghép 2 cảnh...")
                 

@@ -280,10 +280,23 @@ class MuseAutomator:
             window.scrollTo(0, document.body.scrollHeight);
             await new Promise(r => setTimeout(r, 600));
 
-            // 2. Parse all message divs into logical turns
+            // 2. Parse all message divs into logical turns with ALL video attachments
             const msgDivs = Array.from(document.querySelectorAll('[data-message-role="user"], [data-message-role="assistant"]'));
             results.msgCount = msgDivs.length;
             if (!msgDivs.length) return results;
+
+            function isAvatar(el) {
+                if (!el) return true;
+                if (el.closest('[class*="status-avatar"], [class*="rounded-full"], div[class*="avatar"]')) return true;
+                const v = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
+                if (v) {
+                    if (v.videoWidth > 0 && v.videoWidth === v.videoHeight) return true;
+                    if (v.duration > 0 && v.duration < 5.5) return true;
+                    const vCls = String(v.className || '');
+                    if (vCls.includes('rounded-full') || vCls.includes('avatar')) return true;
+                }
+                return false;
+            }
 
             const turns = [];
             let curTurn = null;
@@ -297,19 +310,41 @@ class MuseAutomator:
                     curTurn = { user: text, items: [], el: d };
                 } else if (role === 'assistant') {
                     if (!curTurn) curTurn = { user: '', items: [], el: d };
-                    const v = d.querySelector('video');
-                    const vObj = (v && v.src && v.duration !== 5.041667 && !v.src.includes('avatar')) ? {
-                        src: v.src || v.currentSrc,
-                        w: v.videoWidth,
-                        h: v.videoHeight,
-                        dur: v.duration
-                    } : null;
-                    curTurn.items.push({ text: text, video: vObj, el: d });
+                    
+                    // Extract ALL genuine video elements within this assistant message
+                    const vElements = Array.from(d.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
+                    const seenInMsg = new Set();
+                    const msgVideos = [];
+
+                    for (const vel of vElements) {
+                        if (isAvatar(vel)) continue;
+                        const vTag = vel.tagName.toLowerCase() === 'video' ? vel : vel.querySelector('video');
+                        if (vTag && vTag.duration === 5.041667) continue;
+
+                        let src = vel.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
+                        if (!src) {
+                            const st = vel.querySelector('source');
+                            if (st) src = st.src;
+                        }
+                        if (!src) {
+                            const at = vel.querySelector('a[href*=".mp4"], a[href*="blob:"]');
+                            if (at) src = at.href;
+                        }
+                        if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
+
+                        if (!seenInMsg.has(src)) {
+                            seenInMsg.add(src);
+                            let caption = (vel.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || '').toLowerCase();
+                            msgVideos.push({ src, caption, el: vel });
+                        }
+                    }
+
+                    curTurn.items.push({ text: text, videos: msgVideos, el: d });
                 }
             }
             if (curTurn) turns.push(curTurn);
 
-            // 3. Scan turns backwards (newest to oldest)
+            // 3. Scan turns backwards (newest to oldest) strictly matching THIS project
             for (let t = turns.length - 1; t >= 0; t--) {
                 const turn = turns[t];
                 const uNorm = normalize(turn.user);
@@ -321,62 +356,55 @@ class MuseAutomator:
                 const matchesPos = normPos.some(sig => turnCombined.includes(sig));
                 if (!matchesPos) continue;
 
-                // Strict Warehouse check on user prompt
-                const userHasWh = uNorm.includes('kho xuong') || uNorm.includes('ban kho') || uNorm.includes('tong kho') || uNorm.includes('pallet') || uNorm.includes('xuat xuong');
-                if (isWarehouse && !userHasWh) continue;
-                if (!isWarehouse && userHasWh) continue;
-
-                // Must NOT match excluded signatures if that is the main subject
+                // Must NOT match excluded signatures of other products
                 const matchesNeg = normNeg.some(sig => turnCombined.includes(sig));
                 if (matchesNeg && !matchesPos) continue;
 
-                // Scroll turn into view to ensure its videos are mounted
+                // Strict Warehouse check
+                const userHasWh = uNorm.includes('kho xuong') || uNorm.includes('ban kho') || uNorm.includes('tong kho') || uNorm.includes('pallet') || uNorm.includes('xuat xuong');
+                const asstHasWh = asstNorm.includes('kho xuong') || asstNorm.includes('ban kho') || asstNorm.includes('tong kho') || asstNorm.includes('pallet');
+                const isTurnWh = userHasWh || asstHasWh;
+
+                if (isWarehouse && !isTurnWh) continue;
+                if (!isWarehouse && isTurnWh) continue;
+
+                // Scroll turn into view
                 if (turn.el) {
                     try { turn.el.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
                     await new Promise(r => setTimeout(r, 100));
                 }
 
-                // Inspect each video and its preceding text
-                let labelBefore = '';
+                // Collect all videos in this matched turn
+                const turnVideos = [];
                 for (const it of turn.items) {
-                    if (it.text) {
-                        labelBefore = it.text;
+                    for (const v of it.videos) {
+                        turnVideos.push({ ...v, parentText: it.text });
                     }
-                    // Re-query video in case it was just mounted on scroll
-                    let vidSrc = (it.video && it.video.src) ? it.video.src : null;
-                    if (!vidSrc && it.el) {
-                        const vTag = it.el.querySelector('video');
-                        if (vTag && vTag.src && vTag.duration !== 5.041667 && !vTag.src.includes('avatar')) {
-                            vidSrc = vTag.src || vTag.currentSrc;
-                        }
+                }
+
+                // CASE A: The turn contains 2 or more distinct videos!
+                // Muse AI outputs Scene 1 first and Scene 2 second!
+                if (turnVideos.length >= 2) {
+                    const s1_cand = turnVideos[0];
+                    const s2_cand = turnVideos[1];
+                    if (s1_cand.src !== s2_cand.src) {
+                        results.scene1 = { src: s1_cand.src, aria: s1_cand.caption || 'Cảnh 1' };
+                        results.scene2 = { src: s2_cand.src, aria: s2_cand.caption || 'Cảnh 2' };
+                        // Found both scenes for this project in the exact same turn -> STOP! Zero contamination!
+                        break;
                     }
+                }
 
-                    if (vidSrc) {
-                        const lNorm = normalize(labelBefore);
+                // CASE B: Turn has 1 video
+                if (turnVideos.length === 1) {
+                    const single = turnVideos[0];
+                    const fullTxt = normalize(single.parentText + ' ' + single.caption + ' ' + turn.user);
+                    const isS2 = fullTxt.includes('canh 2') || fullTxt.includes('canh-2') || fullTxt.includes('chot don') || fullTxt.includes('can canh') || fullTxt.includes('poster');
 
-                        // Exclude video if label specifically matches another product
-                        const labelHasNeg = normNeg.some(sig => lNorm.includes(sig));
-                        if (labelHasNeg && !normPos.some(sig => lNorm.includes(sig))) {
-                            continue;
-                        }
-
-                        // Check warehouse consistency on label
-                        const labelHasWh = lNorm.includes('kho xuong') || lNorm.includes('ban kho') || lNorm.includes('tong kho') || lNorm.includes('pallet');
-                        if (isWarehouse && !labelHasWh && !userHasWh) continue;
-                        if (!isWarehouse && labelHasWh) continue;
-
-                        const isScene1 = lNorm.includes('canh 1') || lNorm.includes('canh-1') || lNorm.includes('hook') || lNorm.includes('gioi thieu');
-                        const isScene2 = lNorm.includes('canh 2') || lNorm.includes('canh-2') || lNorm.includes('chot don') || lNorm.includes('can canh') || lNorm.includes('poster');
-
-                        if (isScene1 && !results.scene1) {
-                            results.scene1 = { src: vidSrc, aria: labelBefore };
-                        } else if (isScene2 && !results.scene2) {
-                            results.scene2 = { src: vidSrc, aria: labelBefore };
-                        } else if (!results.scene1) {
-                            results.scene1 = { src: vidSrc, aria: labelBefore };
-                        } else if (!results.scene2 && results.scene1.src !== vidSrc) {
-                            results.scene2 = { src: vidSrc, aria: labelBefore };
-                        }
+                    if (isS2 && !results.scene2) {
+                        results.scene2 = { src: single.src, aria: single.caption || 'Cảnh 2' };
+                    } else if (!isS2 && !results.scene1) {
+                        results.scene1 = { src: single.src, aria: single.caption || 'Cảnh 1' };
                     }
                 }
 
@@ -645,16 +673,18 @@ class MuseAutomator:
                 else:
                     await log_fn(f"Muse AI đang dựng video Cảnh {scene_number} cho '{pname}' ({elapsed}s)...", current_pct)
 
-                # Check if Muse AI triggered deduplication refusal
+                # Check if Muse AI triggered deduplication refusal WITHOUT attaching finished videos
                 muse_refusal = await page.evaluate("""() => {
                     const assts = Array.from(document.querySelectorAll('[data-message-role="assistant"]'));
                     if (!assts.length) return false;
                     const last = assts[assts.length - 1];
                     const t = (last.innerText || '').toLowerCase();
+                    const hasVids = last.querySelectorAll('video, [data-hatch-video-wrapper]').length > 0;
+                    if (hasVids) return false; // If videos are attached, Muse already delivered them!
                     return t.includes('gửi lại đúng y hệt') || t.includes('không tạo lại để đỡ tốn') || t.includes('cứ nhắn thêm “làm lại”') || t.includes('cu nhan them');
                 }""")
                 if muse_refusal and attempt % 4 == 0:
-                    await log_fn(f"Phát hiện Muse AI giữ bản cũ, tự động gửi lệnh yêu cầu tạo bản mới cho Cảnh {scene_number}...", current_pct)
+                    await log_fn(f"Phát hiện Muse AI giữ bản cũ không gửi video, tự động yêu cầu tạo bản mới cho Cảnh {scene_number}...", current_pct)
                     try:
                         p_in = await page.query_selector("textarea, div[contenteditable='true']")
                         if p_in:
@@ -671,8 +701,7 @@ class MuseAutomator:
 
                 # Look STRICTLY in new messages generated AFTER init_msg_count
                 newest_video = await page.evaluate("""async (args) => {
-                    const { initMsgCount, knownSrcs, sceneNum } = args;
-                    const knownSet = new Set(knownSrcs || []);
+                    const { initMsgCount, sceneNum } = args;
 
                     function isAvatar(el) {
                         if (!el) return true;
@@ -721,25 +750,16 @@ class MuseAutomator:
                                 if (aTag) src = aTag.href;
                             }
                             if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
-
-                            // STRICT RULE: Video MUST NOT exist before submitting prompt!
-                            if (knownSet.has(src)) continue;
+                            if (vTag && vTag.duration === 5.041667) continue;
 
                             if (!seenSrcs.has(src)) {
                                 seenSrcs.add(src);
 
-                                let caption = '';
-                                let prev = el.previousElementSibling;
-                                while (prev && !prev.querySelector('video, [data-hatch-video-wrapper]')) {
-                                    caption = (prev.innerText || '') + ' ' + caption;
-                                    prev = prev.previousElementSibling;
-                                }
-                                if (!caption) caption = it.innerText || '';
-
+                                let caption = (el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || it.innerText || '').toLowerCase();
                                 newVideos.push({
                                     src,
-                                    caption: caption.toLowerCase(),
-                                    aria: el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || ''
+                                    caption,
+                                    aria: caption
                                 });
                             }
                         }
@@ -760,19 +780,19 @@ class MuseAutomator:
 
                     // If Muse returned BOTH Scene 1 and Scene 2 together in this response:
                     if (uniqueVideos.length >= 2) {
-                        const v1 = uniqueVideos.find(v => v.caption.includes('canh 1') || v.caption.includes('canh-1') || v.caption.includes('hook') || v.caption.includes('gioi thieu')) || uniqueVideos[0];
-                        const v2 = uniqueVideos.find(v => v !== v1 && (v.caption.includes('canh 2') || v.caption.includes('canh-2') || v.caption.includes('chot don') || v.caption.includes('poster') || v.caption.includes('can canh'))) || (uniqueVideos[1] !== v1 ? uniqueVideos[1] : uniqueVideos[0]);
+                        const v1 = uniqueVideos[0];
+                        const v2 = uniqueVideos[1];
 
                         if (sceneNum === 1) {
                             return {
                                 src: v1.src,
-                                companionSrc: (v2 && v2.src !== v1.src) ? v2.src : null,
+                                companionSrc: (v2.src !== v1.src) ? v2.src : null,
                                 aria: v1.aria
                             };
                         } else {
                             return {
                                 src: v2.src,
-                                companionSrc: (v1 && v1.src !== v2.src) ? v1.src : null,
+                                companionSrc: (v1.src !== v2.src) ? v1.src : null,
                                 aria: v2.aria
                             };
                         }
@@ -780,20 +800,9 @@ class MuseAutomator:
 
                     // If only 1 video returned in new messages:
                     const single = uniqueVideos[0];
-                    const cap = single.caption;
-                    const isS2 = cap.includes('canh 2') || cap.includes('canh-2') || cap.includes('chot don') || cap.includes('can canh') || cap.includes('poster');
-                    const isS1 = cap.includes('canh 1') || cap.includes('canh-1') || cap.includes('hook') || cap.includes('gioi thieu');
-
-                    if (sceneNum === 2 && isS2) {
-                        return { src: single.src, aria: single.aria };
-                    } else if (sceneNum === 1 && isS1) {
-                        return { src: single.src, aria: single.aria };
-                    }
-
                     return { src: single.src, aria: single.aria };
                 }""", {
                     "initMsgCount": init_msg_count,
-                    "knownSrcs": list(init_srcs),
                     "sceneNum": scene_number
                 })
 
@@ -999,30 +1008,31 @@ class MuseAutomator:
                 s2_file.unlink(missing_ok=True)
                 s2_ok = False
 
-        # If s1 is ok but s2 is missing, auto-synthesize Scene 2 closeup motion video so project completes cleanly!
+        # STRICT CHECK: If Scene 2 is missing, DO NOT synthesize fake motion video and DO NOT stitch!
+        # Both scenes MUST be genuine videos from Muse AI before any stitching can occur.
         if s1_ok and not s2_ok:
-            logger.info(f"Scene 2 not found on Muse AI for {project_id}. Synthesizing Scene 2 motion video from product photo...")
-            char_p = PROJECTS_DIR / project_id / "character" / "character_primary.png"
-            prod_p = PROJECTS_DIR / project_id / "product" / "product_original.jpg"
-            img_to_use = str(prod_p) if prod_p.exists() else str(char_p)
-            synth_res = await ffmpeg_service.create_scene_motion_video(
-                image_path=img_to_use,
-                output_path=str(s2_file),
-                duration=10.0,
-                motion_type="closeup",
-                fps=60
-            )
-            if synth_res.get("success") and s2_file.exists() and s2_file.stat().st_size > 10000:
-                s2_ok = True
-                p2 = await ffmpeg_service.probe_video(str(s2_file))
-                conn.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
-                conn.execute("""
-                    INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
-                    VALUES (?, ?, 2, ?, ?, ?, ?, 'ready')
-                """, (f"v2_{project_id[:4]}", project_id, str(s2_file), p2.get("duration", 10.0), "1080x1920", 60.0))
-                conn.commit()
+            logger.info(f"Scene 2 not found yet on Muse AI for {project_id}. Skipping stitch - waiting for Scene 2.")
+            conn.close()
+            return {
+                "success": False,
+                "s1_ok": True,
+                "s2_ok": False,
+                "stitched": False,
+                "message": f"Dự án '{pname}' đã có video Cảnh 1 nhưng CHƯA CÓ video Cảnh 2 trên Muse AI. Hệ thống không ghép video khi thiếu Cảnh 2."
+            }
 
-        # If both scenes are ready, stitch them!
+        if not s1_ok and s2_ok:
+            logger.info(f"Scene 1 not found yet on Muse AI for {project_id}. Skipping stitch - waiting for Scene 1.")
+            conn.close()
+            return {
+                "success": False,
+                "s1_ok": False,
+                "s2_ok": True,
+                "stitched": False,
+                "message": f"Dự án '{pname}' đã có video Cảnh 2 nhưng CHƯA CÓ video Cảnh 1 trên Muse AI. Hệ thống không ghép video khi thiếu Cảnh 1."
+            }
+
+        # If BOTH scenes are genuinely ready, stitch them!
         if s1_ok and s2_ok:
             slug = _slugify(pname)
             stitch_res = await ffmpeg_service.stitch_scenes(
