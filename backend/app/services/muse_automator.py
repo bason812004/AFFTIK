@@ -516,18 +516,22 @@ class MuseAutomator:
 
         # Reference image: ALWAYS prioritize primary AI character image (9:16 ratio with character + product)
         # for BOTH Scene 1 and Scene 2, ensuring character identity, outfit, and warehouse/showroom setting remain 100% consistent!
-        char_primary = PROJECTS_DIR / project_id / "character" / "character_primary.png"
-        prod_orig = PROJECTS_DIR / project_id / "product" / "product_original.jpg"
-
         ref_image: Optional[Path] = None
-        if char_primary.exists():
-            ref_image = char_primary
-        elif character_image_path and Path(character_image_path).exists():
-            ref_image = Path(character_image_path)
-        elif reference_image_path and Path(reference_image_path).exists():
-            ref_image = Path(reference_image_path)
-        elif prod_orig.exists():
-            ref_image = prod_orig
+        for cand_path in [
+            PROJECTS_DIR / project_id / "character" / "character_primary.png",
+            PROJECTS_DIR / project_id / "character" / "character_primary.webp",
+            PROJECTS_DIR / project_id / "character" / "character_primary.jpg",
+            PROJECTS_DIR / project_id / "character" / "character_instant_preview.png",
+            Path(character_image_path) if character_image_path else None,
+            Path(reference_image_path) if reference_image_path else None,
+            PROJECTS_DIR / project_id / "product" / "product_original.png",
+            PROJECTS_DIR / project_id / "product" / "product_original.jpg",
+            PROJECTS_DIR / project_id / "product" / "product_original.jpeg",
+            PROJECTS_DIR / project_id / "product" / "product_original.webp",
+        ]:
+            if cand_path and cand_path.exists() and cand_path.stat().st_size > 1000:
+                ref_image = cand_path
+                break
 
         # 2. Check Muse AI Login
         muse_url = self._get_muse_url()
@@ -556,21 +560,23 @@ class MuseAutomator:
             neg_sigs = _get_excluded_signatures(pname)
 
             # Record strict boundary state BEFORE prompting:
-            # Captures exact message count and all existing video URLs currently in DOM!
+            # Captures exact assistant message count, user message count, and all existing video URLs currently in DOM!
             initial_state = await page.evaluate("""() => {
-                const msgs = Array.from(document.querySelectorAll('[data-message-role="assistant"], [data-message-item="true"], [data-message-role]'));
+                const asstMsgs = Array.from(document.querySelectorAll('[data-message-role="assistant"]'));
+                const userMsgs = Array.from(document.querySelectorAll('[data-message-role="user"]'));
                 const videos = Array.from(document.querySelectorAll('video, [data-hatch-video-wrapper]'));
                 const srcs = videos.map(v => {
                     const vTag = v.tagName.toLowerCase() === 'video' ? v : v.querySelector('video');
                     return v.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
                 }).filter(Boolean);
                 return {
-                    msgCount: msgs.length,
+                    asstCount: asstMsgs.length,
+                    userCount: userMsgs.length,
                     knownSrcs: srcs
                 };
             }""")
-            init_msg_count = initial_state.get("msgCount", 0)
-            init_srcs = set(initial_state.get("knownSrcs", []))
+            init_asst_count = initial_state.get("asstCount", 0)
+            init_known_srcs = list(initial_state.get("knownSrcs", []))
 
             # Input Prompt into Muse AI Chat
             await log_fn(f"Đang chuẩn bị Prompt Cảnh {scene_number} cho '{pname}' vào Muse AI...", 40)
@@ -797,17 +803,23 @@ class MuseAutomator:
                     const asstMessages = Array.from(document.querySelectorAll('[data-message-role="assistant"]'));
                     if (!asstMessages.length) return null;
 
+                    // STRICT BOUNDARY ISOLATION:
+                    // Only consider assistant messages that arrived AFTER our prompt was submitted!
+                    // Any message at index < initAsstCount was created BEFORE our prompt and MUST BE IGNORED!
+                    const newAsstMessages = asstMessages.slice(initAsstCount);
+                    if (!newAsstMessages.length) return null;
+
                     // Scroll recent assistant messages into view to trigger lazy loading
-                    for (let i = Math.max(0, asstMessages.length - 3); i < asstMessages.length; i++) {
-                        try { asstMessages[i].scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
+                    for (let i = Math.max(0, newAsstMessages.length - 2); i < newAsstMessages.length; i++) {
+                        try { newAsstMessages[i].scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
                     }
 
                     let targetMsg = null;
                     let targetVideos = [];
 
-                    // Scan assistant messages from the latest backwards:
-                    for (let i = asstMessages.length - 1; i >= 0; i--) {
-                        const it = asstMessages[i];
+                    // Scan NEW assistant messages from the latest backwards:
+                    for (let i = newAsstMessages.length - 1; i >= 0; i--) {
+                        const it = newAsstMessages[i];
                         const text = normalize(it.innerText || '');
 
                         // Strict: Reject message if it explicitly matches another product's excluded signature!
@@ -839,6 +851,13 @@ class MuseAutomator:
                             }
                             if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
                             if (vTag && vTag.duration === 5.041667) continue;
+
+                            // Filter out videos that already existed in DOM before this prompt:
+                            if (knownSrcs && knownSrcs.includes(src)) {
+                                const t = (it.innerText || '').toLowerCase();
+                                const isRedelivery = t.includes('gửi lại file') || t.includes('vừa làm xong') || t.includes('đỡ tốn hạn mức');
+                                if (!isRedelivery) continue;
+                            }
 
                             if (!seenSrcs.has(src)) {
                                 seenSrcs.add(src);
@@ -887,7 +906,8 @@ class MuseAutomator:
                         aria: single.caption || ('Cảnh ' + sceneNum)
                     };
                 }""", {
-                    "initMsgCount": init_msg_count,
+                    "initAsstCount": init_asst_count,
+                    "knownSrcs": init_known_srcs,
                     "sceneNum": scene_number,
                     "posSigs": pos_sigs,
                     "negSigs": neg_sigs,

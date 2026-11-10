@@ -147,7 +147,12 @@ def _clean_clause(text: str, max_words: int = 24, fallback: str = "") -> str:
     cleaned = re.sub(r'(?i)\b[qQ]?\s*t[iì]m\s+s[aả]n\s+ph[ẩả]m[^\.\,\!\?]*', '', cleaned)
     cleaned = re.sub(r'(?i)\btddng\s*tv\b', '', cleaned)
     cleaned = re.sub(r'(?i)\b\d+\s*dubng\b', '', cleaned)
-    cleaned = re.sub(r'(?i)\bquanh\s+vi[eế][\w]*\b', 'viền', cleaned)
+    cleaned = re.sub(r'(?i)\btương\s*tự\b', '', cleaned)
+    cleaned = re.sub(r'(?i)\bđóng\s+lỗ\s+khuy[^\.\,\!\?]*', '', cleaned)
+    cleaned = re.sub(r'(?i)\bcác\s+góc\s+được\s+gia\s+cố[^\.\,\!\?]*', '', cleaned)
+    cleaned = re.sub(r'(?i)\bviền\s+may\s+\d+\s+đường[^\.\,\!\?]*', '', cleaned)
+    cleaned = re.sub(r'(?i)\bquanh\s+vi[eế][\w]*\b', '', cleaned)
+    cleaned = re.sub(r'(?i)\b[a-z0-9_-]+\.(jpg|jpeg|png|webp|mp4)\b', '', cleaned)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
     for bad in [
@@ -158,7 +163,7 @@ def _clean_clause(text: str, max_words: int = 24, fallback: str = "") -> str:
             return fallback
 
     words = [w for w in cleaned.split() if not any(c in w.lower() for c in ['ä', 'ö', 'ë', 'å', 'ü', 'ø', 'tddng', 'dubng'])]
-    if not words:
+    if not words or len(words) < 3:
         return fallback
     if len(words) <= max_words:
         snippet = " ".join(words)
@@ -937,8 +942,8 @@ class PipelineRunner:
                 "sản phẩm chất lượng cao", "sản phẩm mới", "sản phẩm tuyệt vời", "san pham",
                 "sản phẩm tiện ích", "sản phẩm thương mại", "cần nhập tên", "đang nhận diện"
             ]
-            from backend.app.services.product_analyzer import is_generic_benefits
-            is_generic_name = not p_name or any(k in p_name.lower() for k in generic_keywords)
+            from backend.app.services.product_analyzer import is_generic_benefits, is_valid_recognized_product_name
+            is_generic_name = not p_name or any(k in p_name.lower() for k in generic_keywords) or not is_valid_recognized_product_name(p_name)
             has_generic_benefits = is_generic_benefits(project.get("benefits") or "")
             needs_analysis = is_generic_name or has_generic_benefits
             analyzed_s1 = ""
@@ -1226,9 +1231,17 @@ class PipelineRunner:
             v1_row = await v1_cur.fetchone()
             v1_path = v1_row["video_path"] if v1_row and os.path.exists(v1_row["video_path"]) else None
 
-            if force_regenerate:
+            # If force_regenerate or if project is starting from the beginning:
+            # Strictly wipe any old video files or exports on disk and DB so Scene 1 is NEVER skipped!
+            if force_regenerate or project.get("status") in ["image_uploaded", "character_created", "prompt_created"]:
                 v1_path = None
-                await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 1", (project_id,))
+                (PROJECTS_DIR / project_id / "videos" / "scene1.mp4").unlink(missing_ok=True)
+                (PROJECTS_DIR / project_id / "videos" / "scene2.mp4").unlink(missing_ok=True)
+                for exp_f in (PROJECTS_DIR / project_id / "exports").glob("*.mp4"):
+                    try: exp_f.unlink(missing_ok=True)
+                    except Exception: pass
+                await db.execute("DELETE FROM videos WHERE project_id = ?", (project_id,))
+                await db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
                 await db.commit()
 
             # Discard stale showcase demo videos (4837882 bytes or 9671950 bytes from old landing page loops)
@@ -1473,6 +1486,13 @@ class PipelineRunner:
                     missing.append("Cảnh 2")
                 missing_str = " và ".join(missing)
                 msg = f"Dự án chưa có video {missing_str}. Tuyệt đối không ghép video khi thiếu cảnh! Hệ thống tạm dừng chờ hoàn tất {missing_str}."
+                await db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
+                await db.commit()
+                for exp_f in (PROJECTS_DIR / project_id / "exports").glob("*.mp4"):
+                    try:
+                        exp_f.unlink(missing_ok=True)
+                    except Exception:
+                        pass
                 await update_status("Chưa đủ 2 cảnh", 85, msg, status="failed")
                 return {"success": False, "error": msg}
 
@@ -1527,6 +1547,13 @@ class PipelineRunner:
 
                 if not v2_path or not os.path.exists(v2_path):
                     msg = "Phát hiện Video Cảnh 2 trùng lặp với Cảnh 1. Hệ thống đã xóa Cảnh 2 trùng và tạm dừng để chờ tạo video Cảnh 2 mới, không ghép lặp hình!"
+                    await db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
+                    await db.commit()
+                    for exp_f in (PROJECTS_DIR / project_id / "exports").glob("*.mp4"):
+                        try:
+                            exp_f.unlink(missing_ok=True)
+                        except Exception:
+                            pass
                     await update_status("Chờ Cảnh 2 riêng biệt", 85, msg, status="failed")
                     return {"success": False, "error": msg}
 

@@ -596,6 +596,31 @@ def parse_product_from_ocr_text(ocr_text: str, original_filename: str = "") -> O
             "needs_product_name": False
         }
 
+    # Rule 26: Camping & Outdoor Waterproof Tarp (Tấm bạt che nắng mưa ngoài trời cắm trại dã ngoại)
+    if any(k in combined_norm for k in ["bat", "che nang", "che mua", "cam trai", "da ngoai", "khuy", "boc dem", "vien may", "khoen", "quanh vien"]):
+        p_name = "Tấm Bạt Che Nắng Mưa Ngoài Trời Cắm Trại Dã Ngoại (Viền May Gia Cố Chắc Chắn)"
+        from backend.app.services.pipeline_runner import ensure_42_words
+        s1 = ensure_42_words(
+            "Cả nhà đang tìm một tấm bạt che nắng mưa siêu bền cho các chuyến cắm trại hay che chắn sân vườn? Tấm bạt chuyên dụng này chống thấm nước tuyệt đối, viền may gia cố chắc chắn giúp che nắng mưa an toàn tiện lợi!",
+            filler="cho cả gia đình mình yên tâm sử dụng tiện lợi mỗi ngày nhé"
+        )
+        s2 = ensure_42_words(
+            "Cận cảnh chất liệu bạt dày dặn, các góc bọc đệm gia cố kèm khoen inox đóng đều quanh viền giúp căng bạt dễ dàng. Hôm nay shop đang trợ giá ưu đãi kèm giao hàng nhanh, cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!",
+            filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi hôm nay nhé"
+        )
+        return {
+            "product_name": p_name,
+            "category": "Đồ Dã Ngoại & Cắm Trại",
+            "benefits": "chống thấm nước tuyệt đối, che nắng mưa bền bỉ khi cắm trại, dã ngoại hoặc che chắn sân vườn, kho hàng ngoài trời",
+            "highlights": "bạt dày dặn phủ chống tia UV, viền may 6 đường chỉ gia cố siêu chắc, 4 góc bọc đệm bảo vệ kèm khoen khuy inox bền bỉ",
+            "target_customer": "Người yêu thích cắm trại dã ngoại, hộ gia đình cần bạt che nắng mưa sân vườn",
+            "scene1_dialogue": s1,
+            "scene2_dialogue": s2,
+            "scene1_action": "Nhân vật tươi cười hào sảng, đứng trong showroom đồ dã ngoại cắm trại, tay chỉ vào tấm bạt gấp gọn trên bàn giới thiệu khả năng che mưa che nắng vượt trội và viền gia cố siêu bền",
+            "scene2_action": "Máy quay tiến chậm cận cảnh chất liệu bạt dày dặn, viền may 6 đường chỉ chắc chắn, khoen inox sáng bóng và 4 góc bọc đệm gia cố, nhân vật mỉm cười chỉ tay vào sản phẩm rồi chỉ xuống góc trái kêu gọi chốt đơn",
+            "needs_product_name": False
+        }
+
     # Return None so that analyze_product_image_hybrid falls back to GEMINI FLASH VISION first for any unfamiliar product
     return None
 
@@ -649,6 +674,15 @@ def is_valid_recognized_product_name(name: str) -> bool:
     if any(g in norm for g in generic_bad):
         return False
 
+    # Reject OCR fragments, mobile UI text & non-product attributes
+    bad_fragments = [
+        "quanh vien", "quanh vién", "dong lo", "boc dem", "6 duong", "dubng", "tddng",
+        "tim san pham", "tuong tu", "xem them", "mua ngay", "gio hang", "ap ma", "voucher",
+        "chat lieu", "chieu dai", "chieu rong", "mat truoc", "mat sau", "ben trong", "ben ngoai"
+    ]
+    if any(bf in norm for bf in bad_fragments):
+        return False
+
     # Reject OCR gibberish characters or broken tokens
     if any(bad in low for bad in ['6c', 'ä', 'ö', 'ë', 'å', 'ü', 'ø', 'hiéng', 'tdong', 'tddng', 'phåi', 'versp00', 'khuåy', 'dlen']):
         return False
@@ -656,6 +690,22 @@ def is_valid_recognized_product_name(name: str) -> bool:
     words = clean.split()
     if len(words) < 2:
         return False
+
+    # For 2-word phrases: Must contain at least one recognizable product noun/category
+    if len(words) == 2:
+        valid_nouns = {
+            'bat', 'ao', 'quan', 'noi', 'chao', 'may', 'tui', 'ke', 'hat', 'men', 'kem',
+            'sua', 'son', 'binh', 'bat', 'dia', 'muong', 'thia', 'dao', 'keo', 'den',
+            'quat', 'ghe', 'ban', 'giay', 'dep', 'khan', 'goi', 'nem', 'bom', 'bon',
+            'thuoc', 'phan', 'son', 'keo', 'bang', 'mu', 'non', 'loa', 'mic', 'chuot',
+            'phim', 'cap', 'sac', 'vo', 'op', 'vot', 'long', 'chuong', 'luoi', 'day',
+            'hop', 'chai', 'lo', 'thanh', 'combo', 'bo', 'xe', 'duc', 'khoan', 'nhua',
+            'dau', 'sup', 'coc', 'vay', 'dam', 'trang', 'set', 'tam'
+        }
+        word_set = set(norm.split())
+        if not (word_set & valid_nouns):
+            return False
+
     # Reject if too many single-character tokens (like "S I V E R")
     single_char_tokens = sum(1 for w in words if len(re.sub(r'[^a-zA-ZÀ-ỹ0-9]', '', w)) <= 1)
     if single_char_tokens >= 2 and single_char_tokens / max(1, len(words)) > 0.35:
@@ -692,14 +742,15 @@ def _extract_packaging_clues_from_ocr(ocr_text: str) -> Dict[str, str]:
     if not ocr_text or len(ocr_text.strip()) < 4:
         return {}
     raw_lines = [re.sub(r'\s+', ' ', l).strip() for l in ocr_text.splitlines() if len(l.strip()) >= 3]
-    noise_words = [
-        "tìm sản phẩm", "tương tự", "shopee", "tiktok", "lazada", "zalo", "messenger",
-        "facebook", "giỏ hàng", "mua ngay", "chat ngay", "thêm vào", "đánh giá", "đã bán"
+    noise_patterns = [
+        r'tim\s*san\s*pham', r'tuong\s*tu', r'tddng\s*tv', r'q\s*tim', r'shopee', r'tiktok',
+        r'lazada', r'zalo', r'messenger', r'facebook', r'gio\s*hang', r'mua\s*ngay',
+        r'dong\s*lo\s*khuy', r'quanh\s*vien', r'boc\s*dem', r'6\s*dubng', r'6\s*duong'
     ]
     clean_lines = []
     for line in raw_lines:
-        low = line.lower()
-        if any(nw in low for nw in noise_words):
+        n_line = _normalize_text(line)
+        if any(re.search(pat, n_line) for pat in noise_patterns):
             continue
         if re.match(r'^[\d\s:./%-]+$', line):
             continue
