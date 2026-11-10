@@ -52,37 +52,33 @@ STOP_WORDS = {
     'nhieu', 'loai', 'hop', 'chai', 'goi', 'san', 'pham', 'chinh', 'hang', 
     'tien', 'ich', 'chuan', 'sieu', 'dep', 'chat', 'luong', 'ngay', 'hom', 
     'nay', 'them', 'giam', 'gia', 'khuyen', 'mai', 'kem', 'nguoi', 'dung',
-    'chot', 'don', 'gioi', 'thieu', 'canh'
+    'chot', 'don', 'gioi', 'thieu', 'canh', 'ban', 'kho', 'xuong'
 }
 
 def _get_distinctive_phrases(product_name: str) -> List[str]:
-    is_wh = _is_warehouse_product(product_name)
+    """
+    Extracts distinctive signatures strictly for the PRODUCT itself,
+    completely excluding generic warehouse/variant suffixes like '(Bản kho xưởng #1)'.
+    """
     base_name = _get_base_product_name(product_name)
-    slug = _slugify(product_name)
     base_slug = _slugify(base_name)
-    parts = [p for p in slug.split('-') if p and len(p) >= 2]
+    base_low = base_name.lower().strip()
+    parts = [p for p in base_slug.split('-') if p and len(p) >= 2 and p not in STOP_WORDS]
     
     phrases = set()
-    if slug:
-        phrases.add(slug)
     if base_slug:
         phrases.add(base_slug)
+    if base_low:
+        phrases.add(base_low)
     
-    low_name = (product_name or "").lower().strip()
-    low_base = base_name.lower().strip()
-    if low_name:
-        phrases.add(low_name)
-    if low_base:
-        phrases.add(low_base)
-    
-    # 2-word combinations
+    # 2-word combinations from base product name
     for i in range(len(parts) - 1):
         w1, w2 = parts[i], parts[i+1]
         if w1 not in STOP_WORDS or w2 not in STOP_WORDS:
             phrases.add(f"{w1}-{w2}")
             phrases.add(f"{w1} {w2}")
             
-    # 3-word combinations
+    # 3-word combinations from base product name
     for i in range(len(parts) - 2):
         w1, w2, w3 = parts[i], parts[i+1], parts[i+2]
         phrases.add(f"{w1}-{w2}-{w3}")
@@ -92,19 +88,14 @@ def _get_distinctive_phrases(product_name: str) -> List[str]:
         if len(p) >= 5 and p not in STOP_WORDS:
             phrases.add(p)
             
-    # Product aliases
+    # Product aliases from dictionary
     for cat_name, sigs in ALL_PRODUCT_SPECS.items():
         cat_slug = _slugify(cat_name)
-        if (cat_slug in slug or slug in cat_slug or 
-            cat_slug in base_slug or base_slug in cat_slug or
-            cat_name.lower() in low_name or low_name in cat_name.lower() or
-            cat_name.lower() in low_base or low_base in cat_name.lower()):
+        if (cat_slug in base_slug or base_slug in cat_slug or
+            cat_name.lower() in base_low or base_low in cat_name.lower()):
             phrases.update(sigs)
-            
-    if is_wh:
-        phrases.update(['kho-xuong', 'kho xuong', 'kho xuong re', 'tong kho', 'gia goc', 'xuat xuong', 'pallet'])
 
-    return [p for p in phrases if len(p) >= 3 and p not in STOP_WORDS]
+    return [p for p in phrases if len(p) >= 4 and p not in STOP_WORDS]
 
 def _get_excluded_signatures(target_name: str) -> List[str]:
     base_name = _get_base_product_name(target_name)
@@ -117,7 +108,7 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
         p_low = prod_name.lower().strip()
         if p_slug != base_slug and p_low not in base_low and base_low not in p_low:
             for s in spec_sigs:
-                if len(s.split()) >= 2 or '-' in s or len(s) >= 5:
+                if len(s.split()) >= 2 or '-' in s or len(s) >= 4:
                     excluded.add(s)
             excluded.add(p_slug)
             excluded.add(p_low)
@@ -132,6 +123,8 @@ def _get_excluded_signatures(target_name: str) -> List[str]:
             p_slug = _slugify(p_base)
             p_low = p_base.lower().strip()
             if p_slug and p_slug != base_slug and p_low not in base_low and base_low not in p_low:
+                for s in _get_distinctive_phrases(p_base):
+                    excluded.add(s)
                 excluded.add(p_slug)
                 excluded.add(p_low)
     except Exception:
@@ -251,21 +244,17 @@ class MuseAutomator:
         is_warehouse = _is_warehouse_product(project_name)
 
         try:
-            await page.wait_for_selector('[data-message-item="true"], [data-message-role]', timeout=8000)
+            await page.wait_for_selector('[data-message-role]', timeout=8000)
             await page.evaluate("""() => {
                 const btns = Array.from(document.querySelectorAll('button'));
-                const unread = btns.find(b => (b.innerText || '').includes('tin nhắn'));
+                const unread = btns.find(b => (b.innerText || '').toLowerCase().includes('tin nhắn'));
                 if (unread) { try { unread.click(); } catch (e) {} }
-                const scrollers = Array.from(document.querySelectorAll('*')).filter(e => e.scrollHeight > e.clientHeight + 50 && e.clientHeight > 200);
-                for (const s of scrollers) s.scrollTop = s.scrollHeight;
-                window.scrollTo(0, document.body.scrollHeight);
             }""")
-            await asyncio.sleep(1)
         except Exception:
             pass
 
         match_data = await page.evaluate("""async (args) => {
-            const { targetSlug, posSigs, negSigs, isWarehouse } = args;
+            const { targetSlug, posSigs, negSigs, isWarehouse, projectName } = args;
             const results = { scene1: null, scene2: null };
 
             function normalize(str) {
@@ -277,140 +266,123 @@ class MuseAutomator:
                     .replace(/[\\u0300-\\u036f]/g, '');
             }
 
-            const normPosSigs = Array.from(new Set(posSigs.map(normalize).filter(s => s.length >= 3)));
-            const normNegSigs = Array.from(new Set(negSigs.map(normalize).filter(s => s.length >= 3)));
+            const normPos = Array.from(new Set(posSigs.map(normalize).filter(s => s.length >= 3)));
+            const normNeg = Array.from(new Set(negSigs.map(normalize).filter(s => s.length >= 3)));
 
-            function isAvatar(el) {
-                if (!el) return true;
-                if (el.closest('[class*="status-avatar"], [class*="rounded-full"], div[class*="avatar"]')) return true;
-                const v = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
-                if (v) {
-                    if (v.videoWidth > 0 && v.videoWidth === v.videoHeight) return true;
-                    if (v.duration > 0 && v.duration < 5.5) return true;
-                    const vCls = String(v.className || '');
-                    if (vCls.includes('rounded-full') || vCls.includes('avatar')) return true;
-                }
-                return false;
+            // 1. Un-lazy-load widgets: scroll through all skeleton and video wrappers
+            const widgets = Array.from(document.querySelectorAll('[class*="widget-presentation"], [data-slot="skeleton"], [role="status"], video'));
+            for (const w of widgets) {
+                try {
+                    w.scrollIntoView({ block: 'center', behavior: 'instant' });
+                    await new Promise(r => setTimeout(r, 80));
+                } catch(e) {}
             }
+            window.scrollTo(0, document.body.scrollHeight);
+            await new Promise(r => setTimeout(r, 600));
 
-            const items = Array.from(document.querySelectorAll('[data-message-item="true"], [data-message-role]'));
-            results.msgCount = items.length;
-            if (!items.length) return results;
+            // 2. Parse all message divs into logical turns
+            const msgDivs = Array.from(document.querySelectorAll('[data-message-role="user"], [data-message-role="assistant"]'));
+            results.msgCount = msgDivs.length;
+            if (!msgDivs.length) return results;
 
-            for (let i = items.length - 1; i >= Math.max(0, items.length - 20); i--) {
-                const it = items[i];
-                if (it.querySelector('[role="status"], [data-slot="skeleton"], video, [data-hatch-video-wrapper]')) {
-                    try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
-                }
-            }
-
-            // Group items into turns by data-message-turn-id
             const turns = [];
-            let currentTurnId = null;
-            let currentTurn = [];
+            let curTurn = null;
 
-            for (const it of items) {
-                const turnId = it.getAttribute('data-message-turn-id') || it.getAttribute('data-message-group-id') || 'gen';
-                if (turnId !== currentTurnId && currentTurn.length > 0) {
-                    turns.push({ turnId: currentTurnId, items: currentTurn });
-                    currentTurn = [];
+            for (const d of msgDivs) {
+                const role = d.getAttribute('data-message-role');
+                const text = (d.innerText || '').trim();
+
+                if (role === 'user') {
+                    if (curTurn) turns.push(curTurn);
+                    curTurn = { user: text, items: [], el: d };
+                } else if (role === 'assistant') {
+                    if (!curTurn) curTurn = { user: '', items: [], el: d };
+                    const v = d.querySelector('video');
+                    const vObj = (v && v.src && v.duration !== 5.041667 && !v.src.includes('avatar')) ? {
+                        src: v.src || v.currentSrc,
+                        w: v.videoWidth,
+                        h: v.videoHeight,
+                        dur: v.duration
+                    } : null;
+                    curTurn.items.push({ text: text, video: vObj, el: d });
                 }
-                currentTurnId = turnId;
-                currentTurn.push(it);
             }
-            if (currentTurn.length > 0) {
-                turns.push({ turnId: currentTurnId, items: currentTurn });
-            }
+            if (curTurn) turns.push(curTurn);
 
-            // Scan turns backwards (newest to oldest)
+            // 3. Scan turns backwards (newest to oldest)
             for (let t = turns.length - 1; t >= 0; t--) {
                 const turn = turns[t];
-                const turnTextRaw = turn.items.map(it => it.innerText || '').join(' ').toLowerCase();
-                const turnTextNorm = normalize(turnTextRaw);
+                const uNorm = normalize(turn.user);
+                const asstAllText = turn.items.map(it => it.text).join(' ');
+                const asstNorm = normalize(asstAllText);
+                const turnCombined = uNorm + ' ' + asstNorm;
 
-                // Strict Warehouse Variant Isolation:
-                if (isWarehouse) {
-                    const isWhTurn = turnTextNorm.includes('kho xuong') || turnTextNorm.includes('tong kho') || 
-                                     turnTextNorm.includes('gia goc') || turnTextNorm.includes('pallet') || 
-                                     turnTextNorm.includes('xuat xuong') || turnTextNorm.includes('ban kho');
-                    if (!isWhTurn) continue;
-                } else {
-                    const isWhTurn = turnTextNorm.includes('kho xuong') || turnTextNorm.includes('tong kho') || 
-                                     turnTextNorm.includes('ban kho xuong');
-                    if (isWhTurn) continue;
+                // Must match at least ONE positive product signature
+                const matchesPos = normPos.some(sig => turnCombined.includes(sig));
+                if (!matchesPos) continue;
+
+                // Strict Warehouse check on user prompt
+                const userHasWh = uNorm.includes('kho xuong') || uNorm.includes('ban kho') || uNorm.includes('tong kho') || uNorm.includes('pallet') || uNorm.includes('xuat xuong');
+                if (isWarehouse && !userHasWh) continue;
+                if (!isWarehouse && userHasWh) continue;
+
+                // Must NOT match excluded signatures if that is the main subject
+                const matchesNeg = normNeg.some(sig => turnCombined.includes(sig));
+                if (matchesNeg && !matchesPos) continue;
+
+                // Scroll turn into view to ensure its videos are mounted
+                if (turn.el) {
+                    try { turn.el.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
+                    await new Promise(r => setTimeout(r, 100));
                 }
 
-                // Turn must mention positive signature of target product
-                const turnHasPos = normPosSigs.some(sig => turnTextNorm.includes(sig));
-                if (!turnHasPos) continue;
-
-                // Turn must not explicitly belong to another product
-                const turnHasNeg = normNegSigs.some(sig => turnTextNorm.includes(sig));
-                if (turnHasNeg && !turnHasPos) continue;
-
-                const turnVideos = [];
-                const seenTurnSrcs = new Set();
-
-                for (let idx = 0; idx < turn.items.length; idx++) {
-                    const it = turn.items[idx];
-                    try { it.scrollIntoView({ block: 'center', behavior: 'instant' }); } catch(e) {}
-
-                    const rawVideos = Array.from(it.querySelectorAll('video, [data-testid*="attachment-presentation-video"], [data-hatch-video-wrapper]'));
-                    for (const el of rawVideos) {
-                        if (isAvatar(el)) continue;
-
-                        const vTag = el.tagName.toLowerCase() === 'video' ? el : el.querySelector('video');
-                        let src = el.getAttribute('data-hatch-video-src') || (vTag ? (vTag.currentSrc || vTag.src) : null);
-                        if (!src) {
-                            const sourceTag = el.querySelector('source');
-                            if (sourceTag) src = sourceTag.src;
+                // Inspect each video and its preceding text
+                let labelBefore = '';
+                for (const it of turn.items) {
+                    if (it.text) {
+                        labelBefore = it.text;
+                    }
+                    // Re-query video in case it was just mounted on scroll
+                    let vidSrc = (it.video && it.video.src) ? it.video.src : null;
+                    if (!vidSrc && it.el) {
+                        const vTag = it.el.querySelector('video');
+                        if (vTag && vTag.src && vTag.duration !== 5.041667 && !vTag.src.includes('avatar')) {
+                            vidSrc = vTag.src || vTag.currentSrc;
                         }
-                        if (!src) {
-                            const aTag = el.querySelector('a[href*=".mp4"], a[href*="blob:"]');
-                            if (aTag) src = aTag.href;
+                    }
+
+                    if (vidSrc) {
+                        const lNorm = normalize(labelBefore);
+
+                        // Exclude video if label specifically matches another product
+                        const labelHasNeg = normNeg.some(sig => lNorm.includes(sig));
+                        if (labelHasNeg && !normPos.some(sig => lNorm.includes(sig))) {
+                            continue;
                         }
-                        if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
 
-                        if (!seenTurnSrcs.has(src)) {
-                            seenTurnSrcs.add(src);
+                        // Check warehouse consistency on label
+                        const labelHasWh = lNorm.includes('kho xuong') || lNorm.includes('ban kho') || lNorm.includes('tong kho') || lNorm.includes('pallet');
+                        if (isWarehouse && !labelHasWh && !userHasWh) continue;
+                        if (!isWarehouse && labelHasWh) continue;
 
-                            let caption = '';
-                            let prev = el.previousElementSibling;
-                            while (prev && !prev.querySelector('video, [data-hatch-video-wrapper]')) {
-                                caption = (prev.innerText || '') + ' ' + caption;
-                                prev = prev.previousElementSibling;
-                            }
-                            if (!caption) caption = it.innerText || '';
+                        const isScene1 = lNorm.includes('canh 1') || lNorm.includes('canh-1') || lNorm.includes('hook') || lNorm.includes('gioi thieu');
+                        const isScene2 = lNorm.includes('canh 2') || lNorm.includes('canh-2') || lNorm.includes('chot don') || lNorm.includes('can canh') || lNorm.includes('poster');
 
-                            turnVideos.push({
-                                src,
-                                caption: normalize(caption),
-                                aria: el.getAttribute('aria-label') || (vTag ? vTag.getAttribute('aria-label') : '') || ''
-                            });
+                        if (isScene1 && !results.scene1) {
+                            results.scene1 = { src: vidSrc, aria: labelBefore };
+                        } else if (isScene2 && !results.scene2) {
+                            results.scene2 = { src: vidSrc, aria: labelBefore };
+                        } else if (!results.scene1) {
+                            results.scene1 = { src: vidSrc, aria: labelBefore };
+                        } else if (!results.scene2 && results.scene1.src !== vidSrc) {
+                            results.scene2 = { src: vidSrc, aria: labelBefore };
                         }
                     }
                 }
 
-                if (!turnVideos.length) continue;
-
-                if (turnVideos.length >= 2) {
-                    if (turnVideos[0].src !== turnVideos[1].src) {
-                        results.scene1 = { src: turnVideos[0].src, aria: turnVideos[0].aria };
-                        results.scene2 = { src: turnVideos[1].src, aria: turnVideos[1].aria };
-                        break;
-                    }
-                } else if (turnVideos.length === 1) {
-                    const single = turnVideos[0];
-                    const cap = single.caption;
-                    const isS2 = cap.includes('canh 2') || cap.includes('canh-2') || cap.includes('chot don') || cap.includes('can canh');
-                    if (isS2 && !results.scene2) {
-                        results.scene2 = { src: single.src, aria: single.aria };
-                    } else if (!results.scene1) {
-                        results.scene1 = { src: single.src, aria: single.aria };
-                    }
+                if (results.scene1 && results.scene2 && results.scene1.src !== results.scene2.src) {
+                    break;
                 }
-
-                if (results.scene1 && results.scene2) break;
             }
 
             if (results.scene1 && results.scene2 && results.scene1.src === results.scene2.src) {
@@ -418,7 +390,13 @@ class MuseAutomator:
             }
 
             return results;
-        }""", {"targetSlug": target_slug, "posSigs": pos_sigs, "negSigs": neg_sigs, "isWarehouse": is_warehouse})
+        }""", {
+            "targetSlug": target_slug,
+            "posSigs": pos_sigs,
+            "negSigs": neg_sigs,
+            "isWarehouse": is_warehouse,
+            "projectName": project_name
+        })
 
         logger.info(f"[Muse Scan] Scanned chat for '{project_name}' (wh={is_warehouse}) on {page.url}: msgs={match_data.get('msgCount', 0)}, s1={'found' if match_data.get('scene1') else 'none'}, s2={'found' if match_data.get('scene2') else 'none'}")
         return match_data or {}
@@ -667,6 +645,30 @@ class MuseAutomator:
                 else:
                     await log_fn(f"Muse AI đang dựng video Cảnh {scene_number} cho '{pname}' ({elapsed}s)...", current_pct)
 
+                # Check if Muse AI triggered deduplication refusal
+                muse_refusal = await page.evaluate("""() => {
+                    const assts = Array.from(document.querySelectorAll('[data-message-role="assistant"]'));
+                    if (!assts.length) return false;
+                    const last = assts[assts.length - 1];
+                    const t = (last.innerText || '').toLowerCase();
+                    return t.includes('gửi lại đúng y hệt') || t.includes('không tạo lại để đỡ tốn') || t.includes('cứ nhắn thêm “làm lại”') || t.includes('cu nhan them');
+                }""")
+                if muse_refusal and attempt % 4 == 0:
+                    await log_fn(f"Phát hiện Muse AI giữ bản cũ, tự động gửi lệnh yêu cầu tạo bản mới cho Cảnh {scene_number}...", current_pct)
+                    try:
+                        p_in = await page.query_selector("textarea, div[contenteditable='true']")
+                        if p_in:
+                            await p_in.fill(f"Làm lại bản mới cho Cảnh {scene_number} nhé (tạo góc quay mới 60fps sắc nét)")
+                            await asyncio.sleep(0.3)
+                            s_btn = await page.query_selector("button[aria-label='Gửi']")
+                            if s_btn:
+                                await s_btn.click()
+                            else:
+                                await p_in.press("Enter")
+                            await asyncio.sleep(1.5)
+                    except Exception as ex_ref:
+                        logger.debug(f"Refusal retry send error: {ex_ref}")
+
                 # Look STRICTLY in new messages generated AFTER init_msg_count
                 newest_video = await page.evaluate("""async (args) => {
                     const { initMsgCount, knownSrcs, sceneNum } = args;
@@ -745,27 +747,41 @@ class MuseAutomator:
 
                     if (!newVideos.length) return null;
 
+                    // Deduplicate sources
+                    const uniqueVideos = [];
+                    const seen = new Set();
+                    for (const v of newVideos) {
+                        if (!seen.has(v.src)) {
+                            seen.add(v.src);
+                            uniqueVideos.push(v);
+                        }
+                    }
+                    if (!uniqueVideos.length) return null;
+
                     // If Muse returned BOTH Scene 1 and Scene 2 together in this response:
-                    if (newVideos.length >= 2) {
+                    if (uniqueVideos.length >= 2) {
+                        const v1 = uniqueVideos.find(v => v.caption.includes('canh 1') || v.caption.includes('canh-1') || v.caption.includes('hook') || v.caption.includes('gioi thieu')) || uniqueVideos[0];
+                        const v2 = uniqueVideos.find(v => v !== v1 && (v.caption.includes('canh 2') || v.caption.includes('canh-2') || v.caption.includes('chot don') || v.caption.includes('poster') || v.caption.includes('can canh'))) || (uniqueVideos[1] !== v1 ? uniqueVideos[1] : uniqueVideos[0]);
+
                         if (sceneNum === 1) {
                             return {
-                                src: newVideos[0].src,
-                                companionSrc: newVideos[1].src,
-                                aria: newVideos[0].aria
+                                src: v1.src,
+                                companionSrc: (v2 && v2.src !== v1.src) ? v2.src : null,
+                                aria: v1.aria
                             };
                         } else {
                             return {
-                                src: newVideos[1].src,
-                                companionSrc: newVideos[0].src,
-                                aria: newVideos[1].aria
+                                src: v2.src,
+                                companionSrc: (v1 && v1.src !== v2.src) ? v1.src : null,
+                                aria: v2.aria
                             };
                         }
                     }
 
                     // If only 1 video returned in new messages:
-                    const single = newVideos[0];
+                    const single = uniqueVideos[0];
                     const cap = single.caption;
-                    const isS2 = cap.includes('canh 2') || cap.includes('canh-2') || cap.includes('chot don') || cap.includes('can canh');
+                    const isS2 = cap.includes('canh 2') || cap.includes('canh-2') || cap.includes('chot don') || cap.includes('can canh') || cap.includes('poster');
                     const isS1 = cap.includes('canh 1') || cap.includes('canh-1') || cap.includes('hook') || cap.includes('gioi thieu');
 
                     if (sceneNum === 2 && isS2) {
@@ -969,6 +985,42 @@ class MuseAutomator:
             """, (f"v2_{project_id[:4]}", project_id, str(s2_file), p2.get("duration", 10.0), "1080x1920", 60.0))
 
         conn.commit()
+
+        # Check if s1 and s2 are identical duplicates - NEVER allow identical scenes
+        if s1_ok and s2_ok and s1_file.exists() and s2_file.exists():
+            import hashlib
+            def _sh(p: Path) -> str:
+                h = hashlib.md5()
+                with open(p, "rb") as fp:
+                    h.update(fp.read(65536))
+                return h.hexdigest()
+            if s1_file.stat().st_size == s2_file.stat().st_size or _sh(s1_file) == _sh(s2_file):
+                logger.warning(f"Rejecting duplicate companion scene 2 for {project_id} - s1 and s2 have identical content!")
+                s2_file.unlink(missing_ok=True)
+                s2_ok = False
+
+        # If s1 is ok but s2 is missing, auto-synthesize Scene 2 closeup motion video so project completes cleanly!
+        if s1_ok and not s2_ok:
+            logger.info(f"Scene 2 not found on Muse AI for {project_id}. Synthesizing Scene 2 motion video from product photo...")
+            char_p = PROJECTS_DIR / project_id / "character" / "character_primary.png"
+            prod_p = PROJECTS_DIR / project_id / "product" / "product_original.jpg"
+            img_to_use = str(prod_p) if prod_p.exists() else str(char_p)
+            synth_res = await ffmpeg_service.create_scene_motion_video(
+                image_path=img_to_use,
+                output_path=str(s2_file),
+                duration=10.0,
+                motion_type="closeup",
+                fps=60
+            )
+            if synth_res.get("success") and s2_file.exists() and s2_file.stat().st_size > 10000:
+                s2_ok = True
+                p2 = await ffmpeg_service.probe_video(str(s2_file))
+                conn.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
+                conn.execute("""
+                    INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
+                    VALUES (?, ?, 2, ?, ?, ?, ?, 'ready')
+                """, (f"v2_{project_id[:4]}", project_id, str(s2_file), p2.get("duration", 10.0), "1080x1920", 60.0))
+                conn.commit()
 
         # If both scenes are ready, stitch them!
         if s1_ok and s2_ok:

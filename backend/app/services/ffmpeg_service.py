@@ -276,6 +276,22 @@ class FFmpegService:
         if not os.path.exists(video2_path):
             raise FileNotFoundError(f"Video 2 không tồn tại: {video2_path}")
 
+        # Strict Anti-Duplicate Guard: NEVER stitch two identical videos into one
+        import hashlib
+        def _calc_quick_hash(p: str) -> str:
+            h = hashlib.md5()
+            with open(p, "rb") as fp:
+                h.update(fp.read(65536))
+            return h.hexdigest()
+
+        if (os.path.abspath(video1_path) == os.path.abspath(video2_path) or
+            (os.path.getsize(video1_path) == os.path.getsize(video2_path) and _calc_quick_hash(video1_path) == _calc_quick_hash(video2_path))):
+            logger.warning(f"Prevented stitching identical scene videos: {video1_path} == {video2_path}")
+            return {
+                "success": False,
+                "error": "Cảnh 1 và Cảnh 2 là 2 video giống hệt nhau (trùng lặp). Vui lòng tạo hoặc đổi Cảnh 2 trước khi ghép!"
+            }
+
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         v1_info = self._sync_probe_video(video1_path)

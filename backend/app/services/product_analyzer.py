@@ -997,10 +997,11 @@ async def analyze_product_image_hybrid(
                     gemini_data = cand
                     gemini_data["needs_product_name"] = False
                     from backend.app.services.pipeline_runner import ensure_42_words
+                    from backend.app.services.prompt_templates import sanitize_tiktok_dialogue
                     if gemini_data.get("scene1_dialogue"):
-                        gemini_data["scene1_dialogue"] = ensure_42_words(gemini_data["scene1_dialogue"])
+                        gemini_data["scene1_dialogue"] = ensure_42_words(sanitize_tiktok_dialogue(gemini_data["scene1_dialogue"]))
                     if gemini_data.get("scene2_dialogue"):
-                        gemini_data["scene2_dialogue"] = ensure_42_words(gemini_data["scene2_dialogue"])
+                        gemini_data["scene2_dialogue"] = ensure_42_words(sanitize_tiktok_dialogue(gemini_data["scene2_dialogue"]))
         except Exception as e_gem:
             logger.debug(f"Gemini Web product analysis attempt skipped or timed out: {e_gem}")
 

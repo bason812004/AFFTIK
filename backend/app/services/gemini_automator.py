@@ -891,8 +891,8 @@ class GeminiAutomator:
             '"price": "Ưu đãi giá tốt hôm nay", '
             '"scene1_action": "<Mô tả cụ thể hành động nhân vật chỉ vào bộ phận/bao bì sản phẩm và thuyết trình công dụng trong Cảnh 1>", '
             '"scene2_action": "<Mô tả cụ thể góc máy tiến cận cảnh vào chi tiết/nhãn mác/cấu tạo của sản phẩm và cử chỉ kêu gọi mua hàng trong Cảnh 2>", '
-            '"scene1_dialogue": "<Lời thoại tiếng Việt Cảnh 1 dài từ 42 đến 50 từ, câu văn trọn vẹn đọc hết trong 10 giây: mở đầu đánh trúng nhu cầu khách hàng và giới thiệu trực tiếp tên + công dụng cốt lõi của sản phẩm trong ảnh>", '
-            '"scene2_dialogue": "<Lời thoại tiếng Việt Cảnh 2 dài từ 42 đến 50 từ, câu văn trọn vẹn đọc hết trong 10 giây: nêu bật thành phần/thiết kế/quy cách nổi bật của sản phẩm và kêu gọi bấm ngay vào giỏ hàng góc trái chốt đơn>"}'
+            '"scene1_dialogue": "<Lời thoại tiếng Việt Cảnh 1 dài từ 42 đến 50 từ, câu văn trọn vẹn đọc hết trong 10 giây: mở đầu đánh trúng nhu cầu khách hàng và giới thiệu trực tiếp tên + công dụng cốt lõi của sản phẩm trong ảnh. TUYỆT ĐỐI TUÂN THỦ CHÍNH SÁCH TIKTOK SHOP: không dùng từ cấm như 100%, cam kết, trị dứt điểm, rẻ nhất thị trường, sập sàn, xả lỗ, Zalo, inbox...>", '
+            '"scene2_dialogue": "<Lời thoại tiếng Việt Cảnh 2 dài từ 42 đến 50 từ, câu văn trọn vẹn đọc hết trong 10 giây: nêu bật thành phần/thiết kế/quy cách nổi bật của sản phẩm và kêu gọi bấm ngay vào giỏ hàng góc trái chốt đơn. TUYỆT ĐỐI TUÂN THỦ CHÍNH SÁCH TIKTOK SHOP: không dùng từ cấm như 100%, cam kết, trị dứt điểm, rẻ nhất thị trường, sập sàn, xả lỗ, Zalo, inbox...>"}'
         )
 
         await log("Điền prompt yêu cầu Gemini Flash đọc kỹ bao bì & phân tích sản phẩm...", 45)
@@ -994,6 +994,12 @@ class GeminiAutomator:
             try:
                 parsed = json.loads(candidate_json)
                 if parsed.get("product_name") and (parsed.get("scene2_dialogue") or parsed.get("benefits")):
+                    from backend.app.services.prompt_templates import sanitize_tiktok_dialogue
+                    from backend.app.services.pipeline_runner import ensure_42_words
+                    if parsed.get("scene1_dialogue"):
+                        parsed["scene1_dialogue"] = ensure_42_words(sanitize_tiktok_dialogue(parsed["scene1_dialogue"]))
+                    if parsed.get("scene2_dialogue"):
+                        parsed["scene2_dialogue"] = ensure_42_words(sanitize_tiktok_dialogue(parsed["scene2_dialogue"]))
                     await log(f"Đã nhận diện thành công: {parsed['product_name']} ({parsed.get('category', '')})", 100)
                     return {"success": True, "data": parsed}
             except Exception as e_json:

@@ -17,6 +17,7 @@ export interface Project {
   tiktok_url: string;
   original_image_path?: string;
   primary_character_image_path?: string;
+  character_prompt?: string;
   selected_script_id?: string;
   status: 'created' | 'image_uploaded' | 'character_created' | 'scripts_created' | 'option_selected' | 'video1_ready' | 'video2_ready' | 'videos_stitched' | 'completed';
   automation_mode: AutomationMode;

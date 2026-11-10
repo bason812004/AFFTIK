@@ -202,8 +202,8 @@ class GeminiApiService:
             '  "target_customer": "<Đối tượng khách hàng mục tiêu>",\n'
             '  "offer": "Ưu đãi trợ giá đặc biệt và miễn phí giao hàng hôm nay",\n'
             '  "price": "Ưu đãi giá tốt hôm nay",\n'
-            '  "scene1_dialogue": "<Lời thoại tiếng Việt Cảnh 1 dài đúng 42 từ, giọng nữ miền Bắc tự nhiên: mở đầu thu hút (Hook) và giới thiệu trực tiếp tên + công dụng cốt lõi của sản phẩm trong ảnh>",\n'
-            '  "scene2_dialogue": "<Lời thoại tiếng Việt Cảnh 2 dài đúng 42 từ, giọng nữ miền Bắc tự nhiên: nêu bật chất liệu, độ bền/an toàn của sản phẩm trong ảnh và kêu gọi bấm ngay vào giỏ hàng bên dưới>"\n'
+            '  "scene1_dialogue": "<Lời thoại tiếng Việt Cảnh 1 dài đúng 42 từ, giọng nữ miền Bắc tự nhiên: mở đầu thu hút (Hook) và giới thiệu trực tiếp tên + công dụng cốt lõi của sản phẩm trong ảnh. TUYỆT ĐỐI TUÂN THỦ CHÍNH SÁCH TIKTOK SHOP: không dùng từ cấm như 100%, trị dứt điểm, rẻ nhất, sập sàn, inbox...>",\n'
+            '  "scene2_dialogue": "<Lời thoại tiếng Việt Cảnh 2 dài đúng 42 từ, giọng nữ miền Bắc tự nhiên: nêu bật chất liệu, độ bền/an toàn của sản phẩm trong ảnh và kêu gọi bấm ngay vào giỏ hàng bên dưới. TUYỆT ĐỐI TUÂN THỦ CHÍNH SÁCH TIKTOK SHOP: không dùng từ cấm như 100%, trị dứt điểm, rẻ nhất, sập sàn, inbox...>"\n'
             "}\n"
             "```"
         )
@@ -234,6 +234,12 @@ class GeminiApiService:
                         json_str = match.group(1) if match else raw_text
                         try:
                             parsed_json = json.loads(json_str.strip())
+                            from backend.app.services.prompt_templates import sanitize_tiktok_dialogue
+                            from backend.app.services.pipeline_runner import ensure_42_words
+                            if parsed_json.get("scene1_dialogue"):
+                                parsed_json["scene1_dialogue"] = ensure_42_words(sanitize_tiktok_dialogue(parsed_json["scene1_dialogue"]))
+                            if parsed_json.get("scene2_dialogue"):
+                                parsed_json["scene2_dialogue"] = ensure_42_words(sanitize_tiktok_dialogue(parsed_json["scene2_dialogue"]))
                             return {"success": True, "data": parsed_json}
                         except Exception:
                             pass

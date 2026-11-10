@@ -25,7 +25,9 @@ import {
   Image as ImageIcon,
   Wand2,
   Trash2,
-  Layers
+  Layers,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { ScriptOption, Asset, QualityCheckResult, AutomationMode } from '../types';
 import { api } from '../api';
@@ -140,6 +142,8 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
   const [runningFullAuto, setRunningFullAuto] = useState<boolean>(false);
   const [cloningVariant, setCloningVariant] = useState<boolean>(false);
   const [queueToast, setQueueToast] = useState<{ message: string; projectId?: string } | null>(null);
+  const [showCharPromptText, setShowCharPromptText] = useState<boolean>(false);
+  const [customCharPrompt, setCustomCharPrompt] = useState<string>('');
 
   const effectiveId = projectId || project?.id || 'manual01';
   const activeProjectIdRef = useRef<string | null>(effectiveId);
@@ -556,13 +560,83 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
     { id: 7, label: 'Ghép Video Hoàn Thành', done: !!project?.export },
   ];
 
+  // Female Model Master Prompt (Chuẩn 9 phần)
+  const defaultFemaleCharPrompt = project?.character_prompt || `Tạo ảnh quảng cáo sản phẩm siêu chân thực 8K, tỷ lệ dọc 9:16, phong cách chụp ảnh thương mại cao cấp, sang trọng, chuyên nghiệp, giống ảnh chụp thực tế bằng máy ảnh full-frame chuyên nghiệp với ống kính 50mm.
+
+## 1. BỐI CẢNH CỬA HÀNG PHÙ HỢP VỚI SẢN PHẨM
+
+Dựa hoàn toàn vào hình ảnh sản phẩm tham chiếu để thiết kế một cửa hàng trưng bày có phong cách, công năng và cách bố trí phù hợp với chính sản phẩm đó. Không sử dụng bối cảnh cửa hàng chung chung hoặc không liên quan đến sản phẩm.
+
+Cửa hàng có thiết kế hiện đại, cao cấp, sạch sẽ, rộng rãi và chuyên nghiệp. Màu sắc nội thất, vật liệu trang trí, quầy trưng bày, kệ sản phẩm và các chi tiết xung quanh phải hài hòa với màu sắc, kiểu dáng và phân khúc của sản phẩm tham chiếu.
+
+Bố trí khu vực trưng bày sản phẩm nổi bật ở tiền cảnh. Phía sau là các kệ trưng bày hoặc những sản phẩm cùng dòng, cùng nhóm hàng phù hợp với sản phẩm chính. Các sản phẩm phụ chỉ đóng vai trò tạo không gian cửa hàng chân thực, không được lấn át sản phẩm chính. Không tự ý thêm những mặt hàng không liên quan.
+
+Không gian có chiều sâu tự nhiên, bố cục gọn gàng, tinh tế, thể hiện hình ảnh một cửa hàng uy tín với phong cách thương hiệu cao cấp. Có thể bổ sung quầy tư vấn, tủ trưng bày và bảng thông tin sản phẩm phù hợp với ngành hàng, nhưng không để các chi tiết này che khuất sản phẩm chính.
+
+## 2. KHÓA SẢN PHẨM – BẮT BUỘC GIỮ NGUYÊN 100%
+
+Sử dụng chính xác sản phẩm trong hình ảnh tham chiếu. Giữ nguyên tuyệt đối hình dáng, kích thước, tỷ lệ, màu sắc, chất liệu, cấu trúc, thiết kế, logo, chữ viết và toàn bộ chi tiết gốc.
+
+Tuyệt đối không thiết kế lại, không thay đổi màu sắc, không bóp méo, không kéo giãn, không làm biến dạng, không thêm hoặc xóa bất kỳ chi tiết nào trên sản phẩm.
+
+Đặt sản phẩm trên một bàn trưng bày cao cấp hoặc bục trưng bày sang trọng phù hợp với kích thước và công năng của sản phẩm. Sản phẩm nằm ở tiền cảnh, gần máy ảnh, chiếm vị trí nổi bật, nhìn thấy đầy đủ từ trên xuống dưới và từ trái sang phải, không bị cắt mất bất kỳ phần nào.
+
+Sản phẩm có kích thước chân thực, nổi bật nhưng không phóng đại quá mức. Mặt trước sản phẩm hướng thẳng về phía máy ảnh, hạn chế góc nghiêng để thấy rõ thiết kế, logo và các chi tiết.
+## 3. NGƯỜI MẪU NỮ CAO CẤP
+
+Một người mẫu nữ Việt Nam 21 tuổi, xinh đẹp nổi bật, gương mặt thanh tú, đường nét hài hòa, đôi mắt sáng có thần, làn da tự nhiên, mái tóc được tạo kiểu tinh tế và lớp trang điểm nhẹ nhàng sang trọng.
+
+Người mẫu mặc đồng phục nhân viên cửa hàng cao cấp, thiết kế hiện đại, thanh lịch, màu sắc hài hòa với sản phẩm và không gian cửa hàng. Trang phục chỉn chu, vừa vặn, chất liệu chân thực.
+
+Người mẫu đứng sát bên cạnh hoặc hơi phía sau sản phẩm, ở vị trí gần máy ảnh. Một tay nhẹ nhàng giới thiệu sản phẩm, tay còn lại tạo dáng tự nhiên. Nụ cười thân thiện, ánh mắt tự tin, thần thái chuyên nghiệp như người đại diện thương hiệu trong chiến dịch quảng cáo cao cấp.
+
+Khuôn mặt, đôi mắt, mái tóc, trang phục và bàn tay của người mẫu phải rõ nét, tự nhiên, chân thực; không làm mịn da quá mức, không tạo gương mặt giả hoặc biểu cảm cứng đờ.
+
+## 4. BỐ CỤC VÀ KHOẢNG CÁCH MÁY ẢNH
+
+Khung hình dọc 9:16, góc máy chính diện, bố cục quảng cáo thương mại chuyên nghiệp.
+
+Đưa sản phẩm và người mẫu lại gần máy ảnh hơn, tạo cảm giác gần gũi và nổi bật. Sản phẩm chiếm phần lớn tiền cảnh nhưng vẫn giữ nguyên tỷ lệ thực tế và hiển thị trọn vẹn. Người mẫu đứng ngay cạnh sản phẩm để cả hai trở thành hai chủ thể chính trong khung hình.
+
+Không để người mẫu đứng quá xa. Không để quầy kệ hoặc vật dụng trong cửa hàng che khuất sản phẩm. Cân đối khoảng trống phía trên và hai bên, tạo cảm giác sang trọng, rõ ràng và dễ nhìn.
+
+## 5. LẤY NÉT CỰC RÕ VÀO CẢ SẢN PHẨM LẪN NGƯỜI MẪU
+
+Bắt buộc lấy nét đồng thời vào sản phẩm và người mẫu. Cả hai phải sắc nét rõ ràng trong cùng một khung hình, không được chỉ nét sản phẩm mà mờ người mẫu, hoặc chỉ nét người mẫu mà mờ sản phẩm.
+
+Logo, chữ viết, bề mặt, đường viền, kết cấu và mọi chi tiết trên sản phẩm đều rõ nét. Khuôn mặt, đôi mắt, tóc, trang phục và bàn tay người mẫu cũng rõ nét.
+
+Sử dụng độ sâu trường ảnh đủ lớn, khẩu độ tham khảo f/8–f/11, ISO thấp và tốc độ màn trập phù hợp. Hạn chế xóa phông mạnh, không sử dụng hiệu ứng bokeh quá mức. Hậu cảnh cửa hàng vẫn nhận diện được rõ ràng nhưng không cạnh tranh sự chú ý với hai chủ thể chính.
+
+## 6. ÁNH SÁNG TRẮNG SÁNG RÕ
+
+Sử dụng hệ thống đèn LED ánh sáng trắng trung tính khoảng 5500K, chiếu sáng đồng đều toàn bộ cửa hàng, sản phẩm và người mẫu.
+Ánh sáng phải sáng rõ, sạch, tự nhiên, cao cấp và chuyên nghiệp. Sản phẩm thể hiện đúng màu sắc thực tế, không bị ám vàng, ám xanh hoặc đổi màu. Khuôn mặt người mẫu đủ sáng, không bị tối, không có bóng đổ gắt. Giữ lại chi tiết ở vùng sáng, không cháy sáng, không làm mất kết cấu sản phẩm.
+
+## 7. LOGO VÀ NHẬN DIỆN THƯƠNG HIỆU
+
+Nếu có hình ảnh logo công ty được cung cấp, đặt logo trên bảng hiệu sang trọng ở bức tường phía sau quầy trưng bày. Logo có thể được thiết kế dạng chữ nổi hoặc hộp đèn phát sáng tinh tế, dễ nhìn và phù hợp với nội thất cửa hàng.
+
+Giữ nguyên chính xác hình dáng, màu sắc, tỷ lệ và nội dung logo tham chiếu. Không tự sáng tạo tên công ty, không viết sai chữ, không thay đổi logo gốc. Logo trên sản phẩm cũng phải được giữ nguyên tuyệt đối.
+
+## 8. CHẤT LƯỢNG HÌNH ẢNH
+
+Ảnh quảng cáo sản phẩm siêu chân thực 8K, chi tiết cao, độ nét cao, màu sắc trung thực, ánh sáng trắng đồng đều, chất liệu chân thực, bố cục sang trọng, phong cách nhiếp ảnh quảng cáo chuyên nghiệp. Sản phẩm và người mẫu là hai điểm thu hút chính, nổi bật rõ ràng ngay từ cái nhìn đầu tiên.
+chỉnh sửa sao cho kích thước sản phẩm hợp lý
+
+## 9. NEGATIVE PROMPT – CÁC LỖI CẦN TRÁNH
+
+Không sai sản phẩm, không đổi thiết kế, không đổi màu, không bóp méo, không kéo giãn, không sai tỷ lệ, không sai logo, không chữ sai, không thêm chi tiết lạ, không mất chi tiết gốc, không cắt cụt sản phẩm, không phóng đại sản phẩm quá mức, không làm mờ sản phẩm, không làm mờ người mẫu, không lấy nét sai, không xóa phông quá mạnh, không bokeh quá mức, không nhòe chuyển động, không ánh sáng tối, không ám vàng, không bóng đổ gắt, không cháy sáng, không da nhựa, không gương mặt biến dạng, không tay lỗi, không thừa ngón tay, không cửa hàng bừa bộn, không nội thất cũ kỹ, không bối cảnh nhà máy hoặc kho hàng, không thêm sản phẩm không liên quan, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hoặc CGI giả tạo.`;
+
+  const charPromptToUse = customCharPrompt || defaultFemaleCharPrompt;
+
   // Handlers for Step 1: Character Gen
   const handleGenerateCharacter = async () => {
     try {
       setGeneratingChar(true);
       setCharProgressMsg('Đang mở Gemini và đính kèm ảnh sản phẩm để tạo nhân vật 9:16...');
 
-      const res = await api.generateCharacter(effectiveId);
+      const res = await api.generateCharacter(effectiveId, customCharPrompt || undefined);
       if (res.success) {
         await loadProject(true);
       } else if (res.needs_login) {
@@ -2431,6 +2505,95 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
             </div>
           </div>
 
+          {/* PROMPT TẠO ẢNH NGƯỜI MẪU NỮ CAO CẤP (CHUẨN 9 PHẦN • GEMINI 9:16 8K) */}
+          <div className="p-6 rounded-2xl bg-gradient-to-r from-pink-950/30 via-[#181d29] to-purple-950/30 border-2 border-pink-500/70 space-y-4 shadow-2xl shadow-pink-500/15">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#232a3b] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-pink-500/30 shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-base font-black text-white flex items-center gap-2 flex-wrap">
+                    <span>PROMPT TẠO ẢNH NGƯỜI MẪU NỮ ĐỨNG CÙNG SẢN PHẨM (GEMINI 9:16 8K)</span>
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-pink-500/25 text-pink-300 font-extrabold border border-pink-500/50 uppercase tracking-wide">
+                      Chuẩn 9 Phần • Khóa 100% Sản Phẩm
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Mẫu prompt chuẩn 9 phần độc quyền của bạn: Người mẫu nữ Việt Nam 21 tuổi, showroom thương mại cao cấp, khóa 100% chi tiết sản phẩm, chuẩn tỷ lệ 9:16 siêu nét 8K.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowCharPromptText(!showCharPromptText)}
+                  className="px-4 py-3 rounded-xl bg-[#12161f] hover:bg-[#232a3b] text-slate-200 text-xs font-bold border border-[#232a3b] flex items-center gap-2 transition-all shadow"
+                >
+                  {showCharPromptText ? <EyeOff className="w-4 h-4 text-pink-400" /> : <Eye className="w-4 h-4 text-pink-400" />}
+                  <span>{showCharPromptText ? 'Thu gọn Prompt' : '👁 Xem Chi Tiết Prompt 9 Phần'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(charPromptToUse, 'copy_char_prompt')}
+                  className={`py-3.5 px-6 rounded-xl text-xs font-black uppercase tracking-wide flex items-center justify-center gap-2.5 shadow-xl transition-all transform hover:-translate-y-0.5 ring-2 ${
+                    copiedId === 'copy_char_prompt'
+                      ? 'bg-emerald-500 text-white ring-emerald-300 shadow-emerald-500/40'
+                      : 'bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white ring-pink-400/80 shadow-pink-500/35'
+                  }`}
+                >
+                  {copiedId === 'copy_char_prompt' ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>ĐÃ COPY PROMPT NHÂN VẬT NỮ!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>📋 COPY PROMPT TẠO NHÂN VẬT NỮ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {showCharPromptText ? (
+              <div className="space-y-2">
+                <textarea
+                  value={charPromptToUse}
+                  onChange={(e) => setCustomCharPrompt(e.target.value)}
+                  rows={14}
+                  className="w-full p-4 rounded-xl bg-[#12161f] border border-pink-500/40 text-xs text-slate-200 font-mono leading-relaxed focus:border-pink-400 focus:outline-none shadow-inner"
+                  placeholder="Nội dung prompt tạo ảnh người mẫu nữ 9:16..."
+                />
+                <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                  <span>💡 Bạn có thể trực tiếp sửa prompt này hoặc bấm <b>Copy Prompt Tạo Nhân Vật Nữ</b> để dán vào Gemini.</span>
+                  {customCharPrompt && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomCharPrompt('')}
+                      className="text-pink-400 hover:text-pink-300 font-bold underline"
+                    >
+                      Khôi phục mẫu gốc
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div 
+                onClick={() => setShowCharPromptText(true)}
+                className="p-3.5 rounded-xl bg-[#12161f]/80 border border-dashed border-pink-500/30 hover:border-pink-500/60 cursor-pointer flex items-center justify-between text-xs text-slate-400 transition-all"
+              >
+                <div className="truncate max-w-2xl font-mono text-[11px] text-slate-300">
+                  {charPromptToUse.substring(0, 160)}...
+                </div>
+                <span className="text-[11px] text-pink-400 font-bold shrink-0 ml-2">Bấm để mở xem toàn bộ 9 phần &rarr;</span>
+              </div>
+            )}
+          </div>
+
           {/* SECTION 2: DEDICATED VIDEO GENERATION PROMPTS FOR EXTERNAL PLATFORMS (HIGHLIGHTED COPY PROMPT BUTTONS) */}
           <div className="p-6 rounded-2xl bg-[#181d29] border-2 border-purple-500/40 space-y-5 shadow-xl">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#232a3b] pb-4">
@@ -3101,6 +3264,95 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
               </div>
             </div>
           )}
+
+          {/* PROMPT TẠO ẢNH NGƯỜI MẪU NỮ CAO CẤP (CHUẨN 9 PHẦN • GEMINI 9:16 8K) */}
+          <div className="p-6 rounded-2xl bg-gradient-to-r from-pink-950/30 via-[#181d29] to-purple-950/30 border-2 border-pink-500/70 space-y-4 shadow-2xl shadow-pink-500/15">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#232a3b] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-pink-500/30 shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-base font-black text-white flex items-center gap-2 flex-wrap">
+                    <span>PROMPT TẠO ẢNH NGƯỜI MẪU NỮ ĐỨNG CÙNG SẢN PHẨM (GEMINI 9:16 8K)</span>
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-pink-500/25 text-pink-300 font-extrabold border border-pink-500/50 uppercase tracking-wide">
+                      Chuẩn 9 Phần • Khóa 100% Sản Phẩm
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Mẫu prompt chuẩn 9 phần độc quyền của bạn: Người mẫu nữ Việt Nam 21 tuổi, showroom thương mại cao cấp, khóa 100% chi tiết sản phẩm, chuẩn tỷ lệ 9:16 siêu nét 8K.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowCharPromptText(!showCharPromptText)}
+                  className="px-4 py-3 rounded-xl bg-[#12161f] hover:bg-[#232a3b] text-slate-200 text-xs font-bold border border-[#232a3b] flex items-center gap-2 transition-all shadow"
+                >
+                  {showCharPromptText ? <EyeOff className="w-4 h-4 text-pink-400" /> : <Eye className="w-4 h-4 text-pink-400" />}
+                  <span>{showCharPromptText ? 'Thu gọn Prompt' : '👁 Xem Chi Tiết Prompt 9 Phần'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(charPromptToUse, 'copy_char_prompt_step1')}
+                  className={`py-3.5 px-6 rounded-xl text-xs font-black uppercase tracking-wide flex items-center justify-center gap-2.5 shadow-xl transition-all transform hover:-translate-y-0.5 ring-2 ${
+                    copiedId === 'copy_char_prompt_step1'
+                      ? 'bg-emerald-500 text-white ring-emerald-300 shadow-emerald-500/40'
+                      : 'bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white ring-pink-400/80 shadow-pink-500/35'
+                  }`}
+                >
+                  {copiedId === 'copy_char_prompt_step1' ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>ĐÃ COPY PROMPT NHÂN VẬT NỮ!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>📋 COPY PROMPT TẠO NHÂN VẬT NỮ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {showCharPromptText ? (
+              <div className="space-y-2">
+                <textarea
+                  value={charPromptToUse}
+                  onChange={(e) => setCustomCharPrompt(e.target.value)}
+                  rows={14}
+                  className="w-full p-4 rounded-xl bg-[#12161f] border border-pink-500/40 text-xs text-slate-200 font-mono leading-relaxed focus:border-pink-400 focus:outline-none shadow-inner"
+                  placeholder="Nội dung prompt tạo ảnh người mẫu nữ 9:16..."
+                />
+                <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                  <span>💡 Bạn có thể trực tiếp sửa prompt này hoặc bấm <b>Copy Prompt Tạo Nhân Vật Nữ</b> để dán vào Gemini.</span>
+                  {customCharPrompt && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomCharPrompt('')}
+                      className="text-pink-400 hover:text-pink-300 font-bold underline"
+                    >
+                      Khôi phục mẫu gốc
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div 
+                onClick={() => setShowCharPromptText(true)}
+                className="p-3.5 rounded-xl bg-[#12161f]/80 border border-dashed border-pink-500/30 hover:border-pink-500/60 cursor-pointer flex items-center justify-between text-xs text-slate-400 transition-all"
+              >
+                <div className="truncate max-w-2xl font-mono text-[11px] text-slate-300">
+                  {charPromptToUse.substring(0, 160)}...
+                </div>
+                <span className="text-[11px] text-pink-400 font-bold shrink-0 ml-2">Bấm để mở xem toàn bộ 9 phần &rarr;</span>
+              </div>
+            )}
+          </div>
 
           {/* Side-by-Side Images */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

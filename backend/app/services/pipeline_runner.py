@@ -18,11 +18,53 @@ from backend.app.services.script_parser import parse_gemini_scripts
 
 logger = logging.getLogger(__name__)
 
+def condense_to_42_50_words(text: str) -> str:
+    """
+    Condenses any dialogue longer than 50 words down to 42-48 words,
+    preserving grammatical completeness, the product function, and the CTA.
+    """
+    words = text.split()
+    if len(words) <= 50:
+        return text
+
+    # Split into sentences
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
+    if len(sentences) >= 2:
+        cta = sentences[-1]
+        cta_words = len(cta.split())
+        target_intro_words = max(18, 44 - cta_words)
+        
+        intro = sentences[0]
+        intro_words = intro.split()
+        if len(intro_words) > target_intro_words:
+            comma_parts = [p.strip() for p in intro.split(',') if p.strip()]
+            cur_intro = []
+            cur_count = 0
+            for cp in comma_parts:
+                w_cnt = len(cp.split())
+                if cur_count + w_cnt <= target_intro_words + 3:
+                    cur_intro.append(cp)
+                    cur_count += w_cnt
+                else:
+                    break
+            if cur_intro:
+                intro = ", ".join(cur_intro).rstrip(",;:.!?")
+            else:
+                intro = " ".join(intro_words[:target_intro_words]).rstrip(",;:.!?")
+        
+        combined = f"{intro}. {cta}"
+        if not combined.endswith(("!", ".", "?")):
+            combined += "!"
+        return combined
+
+    return " ".join(words[:46]).rstrip(",;:.!?") + "!"
+
+
 def ensure_42_words(text: str, filler: str = "cho cả gia đình mình yên tâm sử dụng tiện lợi mỗi ngày nhé") -> str:
     """
-    Ensures the dialogue has AT LEAST 42 Vietnamese words (>= 42 words, ideally 42-50 words)
+    Ensures the dialogue has AT LEAST 42 Vietnamese words (>= 42 words, strictly 42-50 words)
     and is ALWAYS a 100% complete, natural, uncut sentence that fits comfortably within 10s.
-    NEVER truncates a sentence in the middle of a phrase!
+    NEVER exceeds 50 words and NEVER truncates a sentence in the middle of a phrase!
     """
     raw = " ".join((text or "").strip().split())
     if not raw:
@@ -33,7 +75,12 @@ def ensure_42_words(text: str, filler: str = "cho cả gia đình mình yên tâ
         if raw.lower().endswith(broken_tail):
             raw = raw[: -len(broken_tail)].rstrip(",.;: ")
 
+    # Cap dialogue that exceeds 50 words to avoid rambling and Muse AI rejection
     words = raw.split()
+    if len(words) > 50:
+        raw = condense_to_42_50_words(raw)
+        words = raw.split()
+
     if len(words) >= 42:
         res = raw.rstrip(",;:")
         if not res.endswith(("!", ".", "?")):
@@ -138,6 +185,10 @@ def build_fallback_scripts(
     Supports warehouse / factory-direct pricing variant (is_warehouse_mode=True).
     """
     clean_pname = (product_name or "").strip()
+    # Strip project variant labels like '(Bản kho xưởng #1)' so dialogue is spoken naturally
+    clean_pname = re.sub(r'\(bản[^\)]*\)', '', clean_pname, flags=re.IGNORECASE)
+    clean_pname = re.sub(r'\(kho xưởng[^\)]*\)', '', clean_pname, flags=re.IGNORECASE)
+    clean_pname = re.sub(r'#\d+', '', clean_pname).strip()
     if not clean_pname or "cần nhập tên" in clean_pname.lower():
         clean_pname = "Sản phẩm chính hãng tiện ích"
 
@@ -190,14 +241,14 @@ def build_fallback_scripts(
 
         raw_s1 = (
             f"Chào cả nhà, hôm nay em quay trực tiếp tại tổng kho xưởng xuất nhập hàng chính hãng. "
-            f"Toàn bộ lô {clean_pname} này xuất thẳng từ xưởng tận gốc không qua trung gian, nên bao giá rẻ sập sàn tận gốc luôn các bác ơi. "
-            f"Vừa chuẩn chất lượng lại giúp {b_clause}, cực kỳ hời cho cả nhà mình nhé!"
+            f"Toàn bộ lô {clean_pname} này xuất thẳng từ xưởng tận gốc không qua trung gian, nên bao giá trợ giá tận xưởng cực hời luôn các bác ơi. "
+            f"Vừa chuẩn chất lượng lại giúp {b_clause}, cực kỳ an tâm cho cả nhà mình nhé!"
         )
         s1 = ensure_42_words(raw_s1, filler="cho các bác yên tâm đặt mua nguồn hàng chuẩn xưởng hôm nay nhé")
 
         raw_s2 = (
             f"Cận cảnh từng chi tiết {clean_pname} cấu tạo chuẩn xưởng {h_clause}. "
-            f"Số lượng xả kho có hạn, hôm nay shop bao giá xuất xưởng rẻ nhất thị trường kèm quà tặng và miễn phí giao hàng tận nhà. "
+            f"Số lượng xuất kho có hạn, hôm nay shop bao giá xuất xưởng cực kỳ ưu đãi kèm quà tặng và miễn phí giao hàng tận nhà. "
             f"Cả nhà bấm ngay vào giỏ hàng góc trái màn hình để chốt đơn nhận giá xưởng ngay hôm nay nhé!"
         )
         s2 = ensure_42_words(raw_s2, filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi giá xưởng nhé")
@@ -224,6 +275,13 @@ def build_fallback_scripts(
                 f"Hôm nay shop đang trợ giá ưu đãi kèm giao hàng nhanh, cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!"
             )
             s2 = ensure_42_words(raw_s2, filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi hôm nay nhé")
+
+    # Strictly sanitize dialogue against TikTok Shop policy violations (cure claims, 100%, superlatives, off-platform)
+    from backend.app.services.prompt_templates import sanitize_tiktok_dialogue
+    s1 = sanitize_tiktok_dialogue(s1)
+    s1 = ensure_42_words(s1, filler="cho cả gia đình mình yên tâm sử dụng tiện lợi mỗi ngày nhé")
+    s2 = sanitize_tiktok_dialogue(s2)
+    s2 = ensure_42_words(s2, filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi hôm nay nhé")
 
     s1_w = len(s1.split())
     s2_w = len(s2.split())
@@ -953,8 +1011,20 @@ class PipelineRunner:
             if force_regenerate or is_instant_placeholder or is_raw_product_copy or not char_image_path or not os.path.exists(char_image_path):
                 await update_status("Tạo nhân vật AI", 30, f"Đang tự động tạo ảnh Nhân vật AI 9:16 đứng giới thiệu {project.get('name')}...")
 
-                p_cur = await db.execute("SELECT content FROM prompts WHERE category = 'character_gen' AND is_default = 1 LIMIT 1")
-                p_tpl = await p_cur.fetchone()
+                pname_low = (project.get("name") or "").lower()
+                is_wh_project = "kho xưởng" in pname_low or "kho xuong" in pname_low or "bản kho" in pname_low
+
+                if is_wh_project:
+                    p_cur = await db.execute("SELECT content FROM prompts WHERE category = 'character_gen_warehouse' AND is_default = 1 LIMIT 1")
+                    p_tpl = await p_cur.fetchone()
+                    if not p_tpl:
+                        p_cur = await db.execute("SELECT content FROM prompts WHERE category = 'character_gen' AND is_default = 1 LIMIT 1")
+                        p_tpl = await p_cur.fetchone()
+                else:
+                    # Standard project: ALWAYS strictly use user's 9-part Female Model prompt!
+                    p_cur = await db.execute("SELECT content FROM prompts WHERE id = 'sys_prompt_char_gen' OR (category = 'character_gen' AND is_default = 1) LIMIT 1")
+                    p_tpl = await p_cur.fetchone()
+
                 char_tpl = p_tpl["content"] if p_tpl else "Tạo ảnh quảng cáo sản phẩm siêu chân thực 8K, tỷ lệ dọc 9:16..."
                 char_prompt = render_prompt(char_tpl, {
                     "product_name": project.get("name", "Sản phẩm thương mại"),

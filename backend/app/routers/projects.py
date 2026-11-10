@@ -12,6 +12,7 @@ from backend.app.models import ProjectCreate, ProjectUpdate
 from backend.app.config import PROJECTS_DIR, DATA_DIR
 from backend.app.services.ffmpeg_service import ffmpeg_service
 from backend.app.services.pipeline_runner import pipeline_runner
+from backend.app.services.prompt_templates import render_prompt, DEFAULT_SYSTEM_PROMPTS
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
@@ -934,7 +935,20 @@ async def get_project(project_id: str, db = Depends(get_db)):
     # Get videos (only return videos whose file actually exists on disk)
     v_cursor = await db.execute("SELECT * FROM videos WHERE project_id = ? ORDER BY scene_number ASC", (project_id,))
     raw_videos = [dict(v) for v in await v_cursor.fetchall()]
-    videos = [v for v in raw_videos if v.get("video_path") and os.path.exists(v["video_path"]) and os.path.getsize(v["video_path"]) > 1000]
+    import hashlib
+    videos = []
+    for v in raw_videos:
+        p = v.get("video_path")
+        if p and os.path.exists(p) and os.path.getsize(p) > 1000:
+            v["file_size"] = os.path.getsize(p)
+            try:
+                h = hashlib.md5()
+                with open(p, "rb") as fp:
+                    h.update(fp.read(65536))
+                v["file_hash"] = h.hexdigest()
+            except Exception:
+                v["file_hash"] = ""
+            videos.append(v)
     project["videos"] = videos
     
     # Get export (only if file exists on disk)
@@ -950,6 +964,22 @@ async def get_project(project_id: str, db = Depends(get_db)):
     else:
         project["export"] = None
     
+    # Attach Female Model character generation prompt
+    try:
+        p_cur = await db.execute("SELECT content FROM prompts WHERE id = 'sys_prompt_char_gen' OR (category = 'character_gen' AND is_default = 1) LIMIT 1")
+        p_tpl = await p_cur.fetchone()
+        char_tpl = p_tpl["content"] if p_tpl else DEFAULT_SYSTEM_PROMPTS[0]["content"]
+        project["character_prompt"] = render_prompt(char_tpl, {
+            "product_name": project.get("name", "Sản phẩm thương mại"),
+            "category": project.get("category", "Thương mại & Bán lẻ"),
+            "description": project.get("description", ""),
+            "benefits": project.get("benefits", "Công dụng tiện ích và hiệu quả vượt trội"),
+            "highlights": project.get("highlights", "Thiết kế chính hãng, chi tiết sắc nét"),
+            "target_customer": project.get("target_customer", "Khách hàng tiêu dùng thông thái")
+        })
+    except Exception:
+        project["character_prompt"] = DEFAULT_SYSTEM_PROMPTS[0]["content"]
+
     return project
 
 @router.put("/{project_id}")
