@@ -492,19 +492,20 @@ class MuseAutomator:
         target_file = target_dir / f"scene{scene_number}.mp4"
         temp_down = target_dir / f"temp_muse_s{scene_number}.mp4"
 
-        # Reference image
+        # Reference image: ALWAYS prioritize primary AI character image (9:16 ratio with character + product)
+        # for BOTH Scene 1 and Scene 2, ensuring character identity, outfit, and warehouse/showroom setting remain 100% consistent!
+        char_primary = PROJECTS_DIR / project_id / "character" / "character_primary.png"
+        prod_orig = PROJECTS_DIR / project_id / "product" / "product_original.jpg"
+
         ref_image: Optional[Path] = None
-        if reference_image_path and Path(reference_image_path).exists():
-            ref_image = Path(reference_image_path)
+        if char_primary.exists():
+            ref_image = char_primary
         elif character_image_path and Path(character_image_path).exists():
             ref_image = Path(character_image_path)
-        else:
-            char_primary = PROJECTS_DIR / project_id / "character" / "character_primary.png"
-            prod_orig = PROJECTS_DIR / project_id / "product" / "product_original.jpg"
-            if char_primary.exists():
-                ref_image = char_primary
-            elif prod_orig.exists():
-                ref_image = prod_orig
+        elif reference_image_path and Path(reference_image_path).exists():
+            ref_image = Path(reference_image_path)
+        elif prod_orig.exists():
+            ref_image = prod_orig
 
         # 2. Check Muse AI Login
         muse_url = self._get_muse_url()
@@ -558,7 +559,10 @@ class MuseAutomator:
                 "div[contenteditable='true'], textarea"
             )
 
-            formatted_prompt = f"[{pname} - Cảnh {scene_number} | 9:16, 10s, 60fps] {scene_prompt}"
+            if scene_prompt.strip().startswith(f"[Cảnh {scene_number}"):
+                formatted_prompt = scene_prompt.strip()
+            else:
+                formatted_prompt = f"[Cảnh {scene_number} - {pname} | 9:16, 10s, 60fps] {scene_prompt}"
             formatted_prompt = " ".join(formatted_prompt.split())
 
             if prompt_input:

@@ -3845,32 +3845,32 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
                 )}
               </div>
 
-              {/* Reference Product Image Banner */}
+              {/* Reference Character Image Banner for Scene 2 */}
               <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[#12161f] border border-[#232a3b]">
                 <img
-                  src={getMediaUrl(project?.original_image_path || project?.primary_character_image_path || '')}
-                  alt="Ảnh tham chiếu Cảnh 2 (Ảnh SP)"
+                  src={getMediaUrl(project?.primary_character_image_path || project?.original_image_path || '')}
+                  alt="Ảnh nhân vật tham chiếu Cảnh 2"
                   className="w-10 h-14 rounded-lg object-cover border border-[#232a3b] shrink-0"
                   onError={(e: any) => { e.target.style.display = 'none'; }}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="text-[10px] text-pink-400 font-bold flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Ảnh tham chiếu Cảnh 2 (Ảnh SP)
+                    <Check className="w-3 h-3" /> Ảnh nhân vật tham chiếu Cảnh 2
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <a
-                      href={`/api/projects/${project.id}/download-product`}
+                      href={project?.primary_character_image_path ? `/api/projects/${project.id}/download-character` : `/api/projects/${project.id}/download-product`}
                       download
-                      className="text-[10px] px-2 py-0.5 rounded bg-[#181d29] hover:bg-[#232a3b] text-blue-300 border border-[#232a3b] flex items-center gap-1"
+                      className="text-[10px] px-2 py-0.5 rounded bg-[#181d29] hover:bg-[#232a3b] text-cyan-300 border border-[#232a3b] flex items-center gap-1"
                     >
-                      <Download className="w-2.5 h-2.5" /> Tải ảnh SP
+                      <Download className="w-2.5 h-2.5" /> Tải ảnh
                     </a>
                     <button
                       type="button"
-                      onClick={() => handleCopyImage('product')}
+                      onClick={() => handleCopyImage(project?.primary_character_image_path ? 'character' : 'product')}
                       className="text-[10px] px-2 py-0.5 rounded bg-[#181d29] hover:bg-[#232a3b] text-pink-300 border border-[#232a3b] flex items-center gap-1"
                     >
-                      <Copy className="w-2.5 h-2.5" /> {copiedId === 'img_product' ? 'Đã Copy!' : 'Copy ảnh SP'}
+                      <Copy className="w-2.5 h-2.5" /> {copiedId === 'img_character' || copiedId === 'img_product' ? 'Đã Copy!' : 'Copy ảnh'}
                     </button>
                   </div>
                 </div>

@@ -1295,7 +1295,7 @@ class PipelineRunner:
                             scene_number=2,
                             prompt=scene2_prompt,
                             character_image_path=char_image_path or original_image,
-                            reference_image_path=original_image or char_image_path,
+                            reference_image_path=char_image_path or original_image,
                             progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
                         )
                     else:
@@ -1336,7 +1336,7 @@ class PipelineRunner:
                                     scene_number=2,
                                     prompt=scene2_prompt,
                                     character_image_path=char_image_path or original_image,
-                                    reference_image_path=original_image or char_image_path,
+                                    reference_image_path=char_image_path or original_image,
                                     progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(84 + (p * 0.05)), m)
                                 )
                                 if retry_v2.get("success") and retry_v2.get("video_path") and os.path.exists(retry_v2["video_path"]):
