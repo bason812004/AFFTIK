@@ -199,6 +199,94 @@ Một tay chỉ hoặc mở lòng bàn tay hướng về sản phẩm giới thi
 Ánh sáng kho xưởng sáng rõ, đèn trần công nghiệp trung tính, ảnh sắc nét từng chi tiết sản phẩm và gương mặt nhân vật, tỷ lệ 9:16."""
     },
     {
+        "id": "sys_prompt_char_factory_female",
+        "category": "character_gen_warehouse",
+        "title": "Tạo ảnh người mẫu nữ trẻ trung tại xưởng sản xuất bạt ngàn pallet hàng hóa (Bản Kho Xưởng TikTok 9:16 8K)",
+        "variables": ["product_name", "category", "description", "benefits", "highlights"],
+        "content": """Tạo ảnh quảng cáo sản phẩm siêu chân thực 8K, tỷ lệ dọc 9:16, phong cách quay video/chụp ảnh thương mại thực tế tại xưởng sản xuất và tổng kho quy mô lớn, giống ảnh chụp thực tế bằng máy ảnh full-frame chuyên nghiệp ống kính 50mm.
+
+## 1. BỐI CẢNH XƯỞNG SẢN XUẤT & TỔNG KHO HÀNG
+Bối cảnh là bên trong một nhà máy / xưởng sản xuất và tổng kho quy mô cực lớn, trần cao khung thép công nghiệp, có mái lấy sáng ban ngày tự nhiên và hệ thống đèn trần nhà xưởng sáng rõ, sạch sẽ.
+Ở tiền cảnh và trung cảnh là lối đi bê tông rộng rãi giữa các dãy hàng. Hai bên lối đi chất đầy các kiện hàng sản phẩm {{product_name}} được xếp ngay ngắn, cao ngất ngưởng trên các pallet gỗ công nghiệp thành tầng tầng lớp lớp bạt ngàn, thể hiện nguồn hàng xuất xưởng dồi dào, tận gốc.
+Phía xa hậu cảnh có các công nhân mặc áo đồng phục công nhân màu xanh dương, đội mũ lưỡi trai đang làm việc, bốc xếp và kiểm hàng, tạo bầu không khí xưởng sản xuất tấp nập, chân thực và uy tín 100%.
+
+## 2. KHÓA SẢN PHẨM 100% TỪ ẢNH THAM CHIẾU
+Sử dụng chính xác sản phẩm {{product_name}} trong hình ảnh tham chiếu. Giữ nguyên 100% hình dáng, chi tiết, cấu trúc, màu sắc, hoa văn, viền may, khoen khuy và chất liệu thật của sản phẩm.
+Tuyệt đối không thay đổi màu sắc, không biến dạng, không sáng tạo sản phẩm khác không liên quan.
+
+## 3. NGƯỜI MẪU NỮ TRẺ TRUNG TẠI XƯỞNG
+Một người mẫu nữ Việt Nam khoảng 21-25 tuổi, gương mặt thanh tú xinh xắn, nụ cười rạng rỡ, thần thái tự tin, gần gũi và hào sảng. Mái tóc đen ngắn ngang vai tự nhiên, lớp trang điểm nhẹ nhàng tươi tắn.
+Trang phục phong cách nhân viên / chủ xưởng trẻ trung, năng động và chân thực:
+- Áo sơ mi denim bò màu xanh dương (blue denim shirt) mặc khoác ngoài.
+- Áo thun trắng trơn đơn giản bên trong.
+- Quần jean xanh ống đứng vừa vặn.
+- Giày thể thao trắng sạch sẽ.
+- Có kẹp một chiếc micro thu âm cài áo không dây màu đen nhỏ gọn (wireless lavalier microphone) ở cổ áo trước ngực.
+
+Tư thế và hành động:
+Người mẫu đứng hoặc bước đi tự nhiên dọc theo lối đi xưởng, hai tay nâng và ôm trọn cọc sản phẩm {{product_name}} ở phía trước người ngang bụng, hướng thẳng về máy ảnh để thấy rõ chi tiết sản phẩm. Một tay giữ sản phẩm, tay kia tươi cười chỉ về phía các dãy pallet hàng bạt ngàn phía sau như đang giới thiệu kho hàng giá xuất xưởng trực tiếp cho khách hàng.
+
+## 4. GÓC MÁY & CHẤT LƯỢNG HÌNH ẢNH 8K
+Khung hình dọc 9:16 chuẩn video TikTok, góc chụp chính diện ngang tầm mắt (eye-level shot).
+Lấy nét cực rõ đồng thời vào cả sản phẩm {{product_name}} và khuôn mặt, trang phục của người mẫu nữ.
+Độ sâu trường ảnh sâu (f/8 - f/11), thấy rõ quy mô kho xưởng và các pallet hàng phía sau.
+Ánh sáng tự nhiên nhà xưởng kết hợp đèn công nghiệp trung tính 5500K, màu sắc trung thực, không ám vàng, không cháy sáng.
+
+## 5. NEGATIVE PROMPT (CÁC LỖI CẦN TRÁNH)
+Không sai sản phẩm tham chiếu, không đổi màu sản phẩm, không biến dạng, không mặt nhựa bóng, không da sáp, không tay thừa ngón, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hay CGI giả tạo, không bối cảnh studio phông bạt nhân tạo."""
+    },
+    {
+        "id": "sys_prompt_script_factory_direct",
+        "category": "script_gen_warehouse",
+        "title": "Kịch bản Thoại Giá Xuất Xưởng Tận Gốc (Bản Kho Xưởng - Triệu View TikTok Shop)",
+        "variables": ["product_name", "category", "benefits", "highlights", "price", "offer"],
+        "content": """Dựa trên hình ảnh nhân vật AI tại xưởng và sản phẩm tham chiếu {{product_name}} (Ngành hàng: {{category}}, Công dụng: {{benefits}}, Chi tiết nổi bật: {{highlights}}):
+
+Hãy viết kịch bản video TikTok Affiliate 2 cảnh chuẩn phong cách "Xưởng sản xuất xả kho giá tận gốc" (10 giây/cảnh, tổng 20 giây):
+- Mỗi cảnh từ 42 đến 48 từ tiếng Việt, câu văn trọn vẹn 100%, nhịp điệu hào sảng, nhanh nhẹn, tự nhiên, đọc hết vừa vặn trong 10 giây.
+- Đúng cấu trúc tâm lý bán hàng của video xưởng triệu view:
+  + CẢNH 1: Hook mua tận xưởng cho rẻ + Lý do mở shop TikTok trợ giá sỉ + Chỉ tay vào giỏ hàng góc trái.
+  + CẢNH 2: Phá giá thị trường (không phải giá đắt ngoài chợ/siêu thị) + Cận cảnh chất liệu chuẩn xưởng bền đẹp + Kêu gọi chốt đơn kẻo hết trợ giá.
+
+ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
+
+### KỊCH BẢN KHO XƯỞNG GIÁ TẬN GỐC: [{{product_name}}]
+
+**CẢNH 1 (10 GIÂY - HOOK GIÁ XƯỞNG):**
+- Lời thoại: "Muốn mua {{product_name}} thì mua ngay tại xưởng sản xuất cho rẻ anh chị ơi! Nay bên em mới mở gian hàng trên TikTok nên để cho cả nhà giá sỉ xuất xưởng tận gốc cực hời. Cả nhà bấm ngay vào giỏ hàng góc trái bên dưới chốt đơn liền tay nhé!"
+- Số từ: 46 từ
+- Prompt Veo 3 / Muse AI: [Cảnh 1 - Giới thiệu giá xuất xưởng {{product_name}} | 9:16, 10s, 60fps] Nhân vật nữ từ ảnh tham chiếu mặc áo sơ mi denim ôm cọc {{product_name}}, bước đi tự nhiên giữa lối đi tổng kho xưởng với các kiện hàng trên pallet xếp cao ngất ngưởng, tươi cười hào sảng chỉ tay giới thiệu. Giữ nguyên 100% nhân vật, trang phục và sản phẩm. Khẩu hình miệng khớp hoàn hảo với thoại tiếng Việt trong 10s. Không chèn chữ, không phụ đề.
+
+**CẢNH 2 (10 GIÂY - PHÁ GIÁ THỊ TRƯỜNG & CHỐT ĐƠN):**
+- Lời thoại: "Mỗi một tài khoản các bác săn được {{product_name}} giá rẻ lắm ạ! Không phải giá cao tiền trăm ngoài thị trường đâu, hôm nay xả kho giá xuất xưởng cực sốc. Chất liệu chuẩn xưởng {{highlights}} bền đẹp, số lượng có hạn cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!"
+- Số từ: 46 từ
+- Prompt Veo 3 / Muse AI: [Cảnh 2 - Cận cảnh chi tiết {{product_name}} & Chốt đơn giá xưởng | 9:16, 10s, 60fps] Máy quay tiến chậm cận cảnh làm nổi bật chất liệu chuẩn xưởng và chi tiết hoàn thiện của {{product_name}} trên tay nhân vật, nhân vật mỉm cười giơ ngón tay cái rồi chỉ xuống góc trái màn hình kêu gọi chốt đơn. Tiếp nối trực tiếp từ khung hình ảnh tham chiếu, giữ nguyên 100% nhân vật và sản phẩm. Khẩu hình miệng khớp hoàn hảo với thoại tiếng Việt trong 10s. Không chèn chữ, không phụ đề."""
+    },
+    {
+        "id": "sys_prompt_video_factory_scene1",
+        "category": "veo3_scene1_warehouse",
+        "title": "Prompt Video Cảnh 1 - Bước đi tại kho xưởng giới thiệu giá tận xưởng (9:16 10s 60fps)",
+        "variables": ["product_name", "category", "dialogue_1"],
+        "content": """[Cảnh 1 - Giới thiệu giá xuất xưởng {{product_name}} | 9:16, 10s, 60fps]
+Nhân vật nữ Việt Nam trẻ trung từ ảnh tham chiếu mặc áo sơ mi denim bò xanh khoác ngoài áo thun trắng, hai tay bưng cọc sản phẩm {{product_name}}, vừa bước đi tự nhiên về phía máy ảnh dọc theo lối đi chính trong nhà xưởng sản xuất quy mô lớn với các dãy pallet hàng hóa xếp cao ngất ngưởng phía sau, vừa tươi cười hào sảng giới thiệu nguồn hàng giá xuất xưởng rẻ tận gốc.
+Bắt đầu chuyển động trực tiếp từ đúng khung hình ảnh tham chiếu đính kèm: giữ nguyên 100% khuôn mặt, trang phục nhân vật, bối cảnh nhà xưởng công nghiệp tấp nập và đúng sản phẩm {{product_name}} trong ảnh tham chiếu (khóa 100% kiểu dáng, màu sắc, chi tiết thật).
+Nhân vật nói tiếng Việt rõ ràng, khẩu hình miệng khớp hoàn hảo với lời thoại trong 10 giây:
+"Muốn mua {{product_name}} thì mua ngay tại xưởng sản xuất cho rẻ anh chị ơi! Nay bên em mới mở gian hàng trên TikTok nên để cho cả nhà giá sỉ xuất xưởng tận gốc cực hời. Cả nhà bấm ngay vào giỏ hàng góc trái bên dưới chốt đơn liền tay nhé!"
+(Không chèn chữ, không phụ đề)."""
+    },
+    {
+        "id": "sys_prompt_video_factory_scene2",
+        "category": "veo3_scene2_warehouse",
+        "title": "Prompt Video Cảnh 2 - Cận cảnh sản phẩm tại xưởng & Kêu gọi chốt đơn giá xưởng (9:16 10s 60fps)",
+        "variables": ["product_name", "category", "highlights", "dialogue_2"],
+        "content": """[Cảnh 2 - Cận cảnh chi tiết {{product_name}} & Chốt đơn giá xưởng | 9:16, 10s, 60fps]
+Máy quay tiến nhẹ cận cảnh (smooth push-in) làm nổi bật từng đường may, nếp gấp và chi tiết cấu tạo chất liệu chuẩn xưởng của {{product_name}} trên tay nhân vật, nhân vật nữ mỉm cười duyên dáng, lật mở chi tiết sản phẩm rồi chỉ ngón tay xuống giỏ hàng góc trái màn hình kêu gọi đặt mua giá xuất xưởng ưu đãi.
+Tiếp nối trực tiếp từ đúng khung hình ảnh tham chiếu đính kèm: giữ nguyên 100% nhân vật, bối cảnh kho xưởng và khóa nguyên vẹn 100% thiết kế, màu sắc, nhãn mác thật của sản phẩm {{product_name}} trong ảnh tham chiếu.
+Nhân vật nói tiếng Việt hào sảng, khẩu hình miệng khớp hoàn hảo với lời thoại trong 10 giây:
+"Mỗi một tài khoản các bác săn được {{product_name}} giá rẻ lắm ạ! Không phải giá cao tiền trăm ngoài thị trường đâu, hôm nay xả kho giá xuất xưởng cực sốc. Chất liệu chuẩn xưởng {{highlights}} bền đẹp, số lượng có hạn cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!"
+(Không chèn chữ, không phụ đề)."""
+    },
+    {
         "id": "sys_prompt_script_gen",
         "category": "script_gen",
         "title": "Tạo Kịch bản & Prompt Video TikTok Affiliate Chuẩn Chính Sách (≥ 42 từ/cảnh trọn câu 10s)",

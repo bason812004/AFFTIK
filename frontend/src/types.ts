@@ -98,7 +98,7 @@ export interface ExportItem {
 export interface PromptTemplate {
   id: string;
   project_id?: string;
-  category: 'character_gen' | 'script_gen' | 'veo3_scene1' | 'veo3_scene2' | 'dialogue_fix' | 'hook_gen' | 'variant_gen';
+  category: string;
   title: string;
   content: string;
   variables: string[];
