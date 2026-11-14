@@ -53,11 +53,12 @@ export const api = {
     return handleResponse<Project>(res);
   },
 
-  async quickCreateProject(file: File, name?: string, autoRun: boolean = true): Promise<{ project_id: string; task_id?: string; success: boolean; name: string; needs_product_name?: boolean }> {
+  async quickCreateProject(file: File, name?: string, autoRun: boolean = true, promptStyle: string = 'warehouse'): Promise<{ project_id: string; task_id?: string; success: boolean; name: string; needs_product_name?: boolean }> {
     const fd = new FormData();
     fd.append('file', file);
     if (name) fd.append('name', name);
     fd.append('auto_run', autoRun ? 'true' : 'false');
+    fd.append('prompt_style', promptStyle);
     const res = await fetch(`${API_BASE}/projects/quick-create`, {
       method: 'POST',
       body: fd
@@ -65,7 +66,7 @@ export const api = {
     return handleResponse(res);
   },
 
-  async batchCreateProjects(files: File[], names: string[] = [], autoRun: boolean = true): Promise<{
+  async batchCreateProjects(files: File[], names: string[] = [], autoRun: boolean = true, promptStyle: string = 'warehouse'): Promise<{
     success: boolean;
     count: number;
     projects: Array<{ project_id: string; task_id?: string; name: string; needs_product_name?: boolean }>;
@@ -81,6 +82,7 @@ export const api = {
       fd.append('names_json', JSON.stringify(names));
     }
     fd.append('auto_run', autoRun ? 'true' : 'false');
+    fd.append('prompt_style', promptStyle);
     const res = await fetch(`${API_BASE}/projects/batch-create`, {
       method: 'POST',
       body: fd

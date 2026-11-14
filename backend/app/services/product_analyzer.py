@@ -745,7 +745,10 @@ def _extract_packaging_clues_from_ocr(ocr_text: str) -> Dict[str, str]:
     noise_patterns = [
         r'tim\s*san\s*pham', r'tuong\s*tu', r'tddng\s*tv', r'q\s*tim', r'shopee', r'tiktok',
         r'lazada', r'zalo', r'messenger', r'facebook', r'gio\s*hang', r'mua\s*ngay',
-        r'dong\s*lo\s*khuy', r'quanh\s*vien', r'boc\s*dem', r'6\s*dubng', r'6\s*duong'
+        r'dong\s*lo\s*khuy', r'quanh\s*vien', r'boc\s*dem', r'6\s*dubng', r'6\s*duong',
+        r'paylater', r'spaylater', r'tra\s*gop', r'toi\s*da\s*\d+', r'\d+[\.,]?\d*\s*x\s*\d+',
+        r'lai\s*suat', r'thanh\s*toan', r'the\s*tin\s*dung', r'vi\s*dien\s*tu', r'voucher', r'giam\s*gia',
+        r'da\s*ban', r'luot\s*ban', r'danh\s*gia', r'ap\s*ma'
     ]
     clean_lines = []
     for line in raw_lines:
@@ -893,7 +896,16 @@ def generate_smart_product_profile_from_name(
         s2_raw = f"Đặc biệt {p_name} sở hữu {highlights}. Hôm nay shop đang trợ giá ưu đãi kèm miễn phí giao hàng, các bác bấm ngay giỏ hàng góc trái chốt đơn nhé!"
         s1_action = f"Nhân vật tươi cười trong {store_context}, chỉ tay trực tiếp vào thân máy và phụ kiện của {p_name} trong ảnh tham chiếu để giới thiệu sức mạnh {benefits}"
         s2_action = f"Máy quay tiến nhẹ cận cảnh làm nổi bật phần đầu máy, vỏ hợp kim và tay cầm chắc chắn của {p_name} ({highlights}), nhân vật chỉ vào sản phẩm rồi chỉ xuống góc trái kêu gọi chốt đơn"
-    elif any(k in norm for k in ["muong", "thia", "dua", "noi", "chao", "dao", "thot", "khay", "bat", "dia", "binh giu nhiet", "am", "bep", "inox 304", "go oc cho"]):
+    elif any(k in norm for k in ["iphone", "apple", "sac", "cu sac", "cap sac", "day sac", "sac nhanh", "pd 20w", "pd 30w", "pd ", "type c", "lightning", "tai nghe", "bluetooth", "pin du phong", "op lung", "dien thoai", "cuong luc", "mic thu am", "hub", "adapter"]):
+        category = "Điện tử & Phụ kiện công nghệ"
+        store_context = "cửa hàng phụ kiện công nghệ và điện thoại hiện đại"
+        benefits = effective_ben_hint or "sạc nhanh thông minh, truyền dữ liệu ổn định và bảo vệ pin tối ưu chống chai nổ cho thiết bị"
+        highlights = ocr_high or "chíp thông minh chống quá dòng quá nhiệt, dây bọc dù chống đứt gãy và chân cắm mạ chống oxy hóa"
+        s1_raw = f"Cả nhà đang tìm {p_name} sạc nhanh thông minh và bảo vệ pin an toàn cho thiết bị của mình? Sản phẩm giúp {benefits}!"
+        s2_raw = f"Đặc biệt {p_name} được trang bị {highlights}. Hôm nay shop đang trợ giá ưu đãi kèm giao hàng nhanh, cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!"
+        s1_action = f"Nhân vật tươi cười trong {store_context}, đặt tay và chỉ trực tiếp vào {p_name} trong ảnh tham chiếu để giới thiệu công nghệ sạc thông minh ({benefits})"
+        s2_action = f"Máy quay tiến nhẹ cận cảnh làm nổi bật cổng sạc, chân tiếp xúc và chất liệu hoàn thiện của {p_name} ({highlights}), nhân vật chỉ vào sản phẩm rồi chỉ xuống góc trái kêu gọi chốt đơn"
+    elif any(k in norm for k in ["muong", "thia", "dua", "noi", "chao", "dao", "thot", "khay", "bat", "dia", "binh giu nhiet", "am dun nuoc", "am sieu toc", "am chen", "am tra", "am dien", "bep", "inox 304", "go oc cho"]):
         category = "Điện gia dụng & Nhà bếp"
         store_context = "showroom đồ dùng nhà bếp và bàn ăn cao cấp ấm cúng"
         benefits = effective_ben_hint or f"giúp công việc nấu nướng và thưởng thức bữa cơm gia đình thêm tiện lợi, sạch sẽ, hạn chế bám dính và an toàn tuyệt đối cho sức khỏe"

@@ -81,7 +81,18 @@ def sanitize_tiktok_dialogue(text: str) -> str:
         (r'\báp\s+mã[^\.\,\!\?]*', ''),
         (r'\bvoucher[^\.\,\!\?]*', ''),
         (r'\bthêm\s+vào\s+giỏ\s+hàng\b', 'bấm vào giỏ hàng'),
-        (r'\bmua\s+ngay\b', 'chốt đơn ngay')
+        (r'\bmua\s+ngay\b', 'chốt đơn ngay'),
+
+        # E-Commerce PayLater, Installment & Financing spam
+        (r'\b\d+[\.,]?\d*\s*x\s*\d+\b', ''),
+        (r'\bvới\s+paylater[^\.\,\!\?]*', ''),
+        (r'\bpaylater[^\.\,\!\?]*', ''),
+        (r'\bspaylater[^\.\,\!\?]*', ''),
+        (r'\btrả\s*góp[^\.\,\!\?]*', ''),
+        (r'\btối\s*đa\s*\d+\s*(triệu|tr|k)\b', ''),
+        (r'\bchỉ\s*từ\s*\d+k?\s*\/\s*(tháng|ngày)\b', ''),
+        (r'\blãi\s*suất\s*0%?\b', ''),
+        (r'\b(tháng|thg)\s*x\s*\d+\b', '')
     ]
     
     res = text

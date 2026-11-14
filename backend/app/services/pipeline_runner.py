@@ -53,7 +53,7 @@ def condense_to_42_50_words(text: str) -> str:
             else:
                 intro = " ".join(intro_words[:target_intro_words]).rstrip(",;:.!?")
         
-        combined = f"{intro}. {cta}"
+        combined = f"{intro.rstrip('.!?,;:')}. {cta}"
         if not combined.endswith(("!", ".", "?")):
             combined += "!"
         return combined
@@ -237,12 +237,12 @@ def build_fallback_scripts(
 
     b_clause = _clean_clause(
         benefits,
-        max_words=28,
+        max_words=18,
         fallback=f"phát huy tối đa công dụng thực tế của {clean_pname}"
     )
     h_clause = _clean_clause(
         highlights,
-        max_words=28,
+        max_words=16,
         fallback="thiết kế chuẩn chính hãng, bền bỉ và an toàn khi sử dụng"
     )
     if h_clause.startswith("thiết kế chuẩn") and benefits and "." in benefits:
@@ -255,16 +255,16 @@ def build_fallback_scripts(
         scene2_action = f"Máy quay tiến chậm cận cảnh chi tiết cấu tạo chất liệu chuẩn xưởng của {clean_pname} ({h_clause}), nhân vật mỉm cười giơ ngón tay cái rồi chỉ xuống góc trái màn hình kêu gọi chốt đơn nhận giá xưởng"
 
         raw_s1 = (
-            f"Chào cả nhà, hôm nay em quay trực tiếp tại tổng kho xưởng xuất nhập hàng chính hãng. "
-            f"Toàn bộ lô {clean_pname} này xuất thẳng từ xưởng tận gốc không qua trung gian, nên bao giá trợ giá tận xưởng cực hời luôn các bác ơi. "
-            f"Vừa chuẩn chất lượng lại giúp {b_clause}, cực kỳ an tâm cho cả nhà mình nhé!"
+            f"Muốn mua {clean_pname} thì mua ngay tại xưởng sản xuất cho rẻ anh chị ơi! "
+            f"Nay bên em mở gian hàng TikTok trợ giá sỉ tận gốc cực hời. "
+            f"Cả nhà bấm ngay giỏ hàng góc trái chốt đơn liền tay nhé!"
         )
-        s1 = ensure_42_words(raw_s1, filler="cho các bác yên tâm đặt mua nguồn hàng chuẩn xưởng hôm nay nhé")
+        s1 = ensure_42_words(raw_s1, filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi giá xưởng nhé")
 
         raw_s2 = (
-            f"Cận cảnh từng chi tiết {clean_pname} cấu tạo chuẩn xưởng {h_clause}. "
-            f"Số lượng xuất kho có hạn, hôm nay shop bao giá xuất xưởng cực kỳ ưu đãi kèm quà tặng và miễn phí giao hàng tận nhà. "
-            f"Cả nhà bấm ngay vào giỏ hàng góc trái màn hình để chốt đơn nhận giá xưởng ngay hôm nay nhé!"
+            f"Mỗi một tài khoản các bác săn được {clean_pname} giá rẻ lắm ạ! "
+            f"Không phải giá cao tiền trăm ngoài thị trường đâu, hôm nay xả kho giá xuất xưởng cực sốc. "
+            f"Chất liệu chuẩn xưởng {h_clause} bền đẹp, số lượng có hạn cả nhà bấm ngay giỏ hàng góc trái chốt đơn nhé!"
         )
         s2 = ensure_42_words(raw_s2, filler="vào giỏ hàng góc trái bên dưới để chốt đơn nhận ưu đãi giá xưởng nhé")
     else:
@@ -985,6 +985,9 @@ class PipelineRunner:
                 project["price"] = p_price
                 project["offer"] = p_offer
 
+                pname_low = (clean_name or "").lower()
+                is_wh_project = "kho xưởng" in pname_low or "kho xuong" in pname_low or "bản kho" in pname_low or (get_setting("default_prompt_style") == "warehouse")
+
                 tailored_scripts = build_fallback_scripts(
                     product_name=clean_name,
                     category=p_cat,
@@ -993,7 +996,8 @@ class PipelineRunner:
                     offer=p_offer,
                     price=p_price,
                     custom_scene1_dialogue=analyzed_s1,
-                    custom_scene2_dialogue=analyzed_s2
+                    custom_scene2_dialogue=analyzed_s2,
+                    is_warehouse_mode=is_wh_project
                 )
                 await db.execute("DELETE FROM scripts WHERE project_id = ?", (project_id,))
                 chosen_s_id = str(uuid.uuid4())[:8]
@@ -1034,7 +1038,7 @@ class PipelineRunner:
                 await update_status("Tạo nhân vật AI", 30, f"Đang tự động tạo ảnh Nhân vật AI 9:16 đứng giới thiệu {project.get('name')}...")
 
                 pname_low = (project.get("name") or "").lower()
-                is_wh_project = "kho xưởng" in pname_low or "kho xuong" in pname_low or "bản kho" in pname_low
+                is_wh_project = "kho xưởng" in pname_low or "kho xuong" in pname_low or "bản kho" in pname_low or (get_setting("default_prompt_style") == "warehouse")
 
                 if is_wh_project:
                     p_cur = await db.execute("SELECT content FROM prompts WHERE category = 'character_gen_warehouse' AND is_default = 1 LIMIT 1")
@@ -1141,6 +1145,8 @@ class PipelineRunner:
 
             if script_is_stale:
                 await update_status("Viết Prompt theo sản phẩm", 58, f"Đang tổng hợp kịch bản 2 cảnh và Prompt tạo video chuyên biệt cho {project.get('name')}...")
+                pname_low = (project.get("name") or "").lower()
+                is_wh_project = "kho xưởng" in pname_low or "kho xuong" in pname_low or "bản kho" in pname_low or (get_setting("default_prompt_style") == "warehouse")
                 parsed_scripts = build_fallback_scripts(
                     product_name=project.get("name", "Sản phẩm tiện ích"),
                     category=project.get("category", "Thương mại & Bán lẻ"),
@@ -1149,7 +1155,8 @@ class PipelineRunner:
                     offer=project.get("offer", "Tặng kèm ưu đãi trợ giá hôm nay"),
                     price=project.get("price", "Ưu đãi hôm nay"),
                     custom_scene1_dialogue=analyzed_s1,
-                    custom_scene2_dialogue=analyzed_s2
+                    custom_scene2_dialogue=analyzed_s2,
+                    is_warehouse_mode=is_wh_project
                 )
 
                 await db.execute("DELETE FROM scripts WHERE project_id = ?", (project_id,))

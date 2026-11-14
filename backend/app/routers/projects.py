@@ -207,7 +207,8 @@ async def _create_single_product_project(
     orig_filename: str,
     hint_name: str = "",
     auto_run: bool = True,
-    trigger_pipeline_immediately: bool = True
+    trigger_pipeline_immediately: bool = True,
+    is_warehouse: bool = True
 ) -> dict:
     project_id = str(uuid.uuid4())[:8]
     create_project_folders(project_id)
@@ -249,6 +250,10 @@ async def _create_single_product_project(
     else:
         needs_product_name = False
         clean_name = "Đang nhận diện sản phẩm..."
+
+    if is_warehouse:
+        if "kho xưởng" not in clean_name.lower() and "bản kho" not in clean_name.lower() and "đang nhận diện" not in clean_name.lower():
+            clean_name = f"{clean_name} (Bản kho xưởng)"
 
     category = analyzed_data.get("category") or "Thương mại & Bán lẻ"
     description = f"Sản phẩm {clean_name}"
@@ -306,7 +311,8 @@ async def _create_single_product_project(
             offer=offer,
             price=price,
             custom_scene1_dialogue=analyzed_data.get("scene1_dialogue", ""),
-            custom_scene2_dialogue=analyzed_data.get("scene2_dialogue", "")
+            custom_scene2_dialogue=analyzed_data.get("scene2_dialogue", ""),
+            is_warehouse_mode=is_warehouse
         )
         for s in init_scripts:
             s_id = str(uuid.uuid4())[:8]
@@ -345,8 +351,10 @@ async def quick_create_project(
     file: UploadFile = File(...),
     name: Optional[str] = Form(None),
     auto_run: bool = Form(True),
+    prompt_style: Optional[str] = Form("warehouse"),
     db = Depends(get_db)
 ):
+    is_warehouse = (prompt_style or "warehouse").lower() == "warehouse"
     content = file.file.read()
     return await _create_single_product_project(
         db=db,
@@ -354,7 +362,8 @@ async def quick_create_project(
         orig_filename=file.filename or "product.jpg",
         hint_name=(name or "").strip(),
         auto_run=auto_run,
-        trigger_pipeline_immediately=True
+        trigger_pipeline_immediately=True,
+        is_warehouse=is_warehouse
     )
 
 
@@ -363,6 +372,7 @@ async def batch_create_projects(
     files: List[UploadFile] = File(...),
     names_json: Optional[str] = Form(None),
     auto_run: bool = Form(True),
+    prompt_style: Optional[str] = Form("warehouse"),
     db = Depends(get_db)
 ):
     """
@@ -373,6 +383,7 @@ async def batch_create_projects(
     if not files:
         raise HTTPException(status_code=400, detail="Vui lòng chọn ít nhất 1 ảnh sản phẩm.")
 
+    is_warehouse = (prompt_style or "warehouse").lower() == "warehouse"
     hint_names: List[str] = []
     if names_json:
         try:
@@ -396,7 +407,8 @@ async def batch_create_projects(
             orig_filename=uf.filename or f"product_{idx+1}.jpg",
             hint_name=h_name,
             auto_run=True,
-            trigger_pipeline_immediately=False
+            trigger_pipeline_immediately=False,
+            is_warehouse=is_warehouse
         )
         created_projects.append(res)
         created_ids.append(res["project_id"])

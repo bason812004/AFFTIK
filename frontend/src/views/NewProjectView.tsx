@@ -38,6 +38,7 @@ export const NewProjectView: React.FC<NewProjectViewProps> = ({
   const [pasting, setPasting] = useState(false);
   const [pastedSuccess, setPastedSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [promptStyle, setPromptStyle] = useState<'warehouse' | 'store'>('warehouse');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastPasteTimeRef = useRef<number>(0);
@@ -219,7 +220,8 @@ export const NewProjectView: React.FC<NewProjectViewProps> = ({
         const res = await api.quickCreateProject(
           single.file,
           single.name.trim() || undefined,
-          true
+          true,
+          promptStyle
         );
         if (res && res.project_id) {
           onProjectCreated(res.project_id);
@@ -228,7 +230,7 @@ export const NewProjectView: React.FC<NewProjectViewProps> = ({
       } else {
         const files = items.map(i => i.file);
         const names = items.map(i => i.name.trim());
-        const batchRes = await api.batchCreateProjects(files, names, true);
+        const batchRes = await api.batchCreateProjects(files, names, true, promptStyle);
         if (batchRes && batchRes.first_project_id) {
           onProjectCreated(batchRes.first_project_id);
           return;
@@ -275,6 +277,67 @@ export const NewProjectView: React.FC<NewProjectViewProps> = ({
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Style Selector: Warehouse vs Store */}
+        <div className="p-5 rounded-2xl bg-[#181d29] border border-[#232a3b] space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Chọn Phong Cách Video:</span>
+            </span>
+            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-extrabold border border-emerald-500/30">
+              MẪU KHO XƯỞNG TRIỆU VIEW
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setPromptStyle('warehouse')}
+              className={`p-4 rounded-xl text-left border transition-all flex flex-col gap-2 ${
+                promptStyle === 'warehouse'
+                  ? 'bg-gradient-to-br from-emerald-500/15 to-teal-500/10 border-emerald-500/50 shadow-lg shadow-emerald-500/10'
+                  : 'bg-[#12161f]/60 border-[#232a3b] hover:border-slate-600 opacity-70'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>🏬 BẢN TỔNG KHO XƯỞNG</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-black">
+                    KHUYÊN DÙNG
+                  </span>
+                </span>
+                {promptStyle === 'warehouse' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Người mẫu nữ 21 tuổi áo sơ mi denim bò bưng sản phẩm giữa tổng kho xưởng bạt ngàn pallet hàng hóa. Thoại hook mua tận xưởng giá rẻ, chốt đơn nhận giá sỉ xuất xưởng.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPromptStyle('store')}
+              className={`p-4 rounded-xl text-left border transition-all flex flex-col gap-2 ${
+                promptStyle === 'store'
+                  ? 'bg-gradient-to-br from-purple-500/15 to-pink-500/10 border-purple-500/50 shadow-lg shadow-purple-500/10'
+                  : 'bg-[#12161f]/60 border-[#232a3b] hover:border-slate-600 opacity-70'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>🏪 BẢN SHOWROOM CỬA HÀNG</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-black">
+                    CAO CẤP
+                  </span>
+                </span>
+                {promptStyle === 'store' && <CheckCircle2 className="w-4 h-4 text-purple-400" />}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Người mẫu nữ thanh lịch trong không gian showroom trưng bày sản phẩm sang trọng, giới thiệu công năng và tiện ích tiêu dùng.
+              </p>
+            </button>
+          </div>
+        </div>
+
         {/* Main Upload Box */}
         <div className="p-6 rounded-2xl bg-[#181d29] border border-[#232a3b] space-y-5">
           <div className="flex items-center justify-between border-b border-[#232a3b] pb-3 flex-wrap gap-2">
