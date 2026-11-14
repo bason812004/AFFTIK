@@ -78,6 +78,11 @@ async def generate_character(
             "target_customer": p_dict["target_customer"] or "Khách hàng Việt Nam"
         })
 
+    from backend.app.services.prompt_templates import get_product_physical_scale_hint
+    scale_hint = get_product_physical_scale_hint(p_dict.get("name", ""), p_dict.get("category", ""))
+    if scale_hint and scale_hint not in prompt_to_use:
+        prompt_to_use = prompt_to_use + scale_hint
+
     # Record automation task
     task_id = str(uuid.uuid4())[:8]
     await db.execute("""

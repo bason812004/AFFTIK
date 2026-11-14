@@ -686,12 +686,23 @@ class MuseAutomator:
                         try { target.click(); } catch(e) {}
                     }
 
-                    // Priority 1: Suggested clean dialogue / fixed script buttons (e.g. "Dùng thoại mình soạn lại này")
+                    // Priority 0: Retry / Re-create scene button (e.g. "Tạo lại cảnh", "Thử lại", "Làm lại", "Retry")
                     const allInteractive = Array.from(document.querySelectorAll('button, [role="button"], [data-slot="button"], [data-testid*="button"], a, div, span'));
                     for (const el of allInteractive) {
                         const t = (el.innerText || el.textContent || '').toLowerCase().trim();
                         if (!t || t.length > 50) continue;
-                        if (t.includes('dùng thoại') || t.includes('soạn lại') || t.includes('thoại sạch') || t.includes('duyệt thoại') || t.includes('kịch bản sạch')) {
+                        if (t.includes('tạo lại cảnh') || t.includes('thử lại') || t.includes('làm lại cảnh') || t.includes('tạo lại') || t.includes('retry')) {
+                            const btn = el.closest('button, [role="button"], a') || el;
+                            triggerFullClick(btn);
+                            return 'Tạo lại cảnh: ' + t;
+                        }
+                    }
+
+                    // Priority 1: Suggested clean dialogue / fixed script buttons (e.g. "Dùng thoại mình soạn lại này", "Dùng thoại")
+                    for (const el of allInteractive) {
+                        const t = (el.innerText || el.textContent || '').toLowerCase().trim();
+                        if (!t || t.length > 50) continue;
+                        if (t.includes('dùng thoại') || t.includes('soạn lại này') || t.includes('soạn lại') || t.includes('thoại sạch') || t.includes('duyệt thoại') || t.includes('kịch bản sạch')) {
                             const btn = el.closest('button, [role="button"], a') || el;
                             triggerFullClick(btn);
                             return 'Đồng ý thoại sạch: ' + t;
@@ -752,18 +763,34 @@ class MuseAutomator:
                 }""")
 
                 if muse_state == 'clean_dialogue' and not is_muse_busy:
-                    await log_fn(f"Phát hiện Muse AI đề xuất duyệt thoại sạch, tự động xác nhận thoại sạch để tạo video Cảnh {scene_number} ngay...", current_pct)
+                    await log_fn(f"Phát hiện Muse AI đề xuất duyệt thoại sạch, tự động bấm 'Dùng thoại mình soạn lại này' và gửi xác nhận cho Cảnh {scene_number}...", current_pct)
                     try:
-                        p_in = await page.query_selector("textarea, div[contenteditable='true']")
-                        if p_in:
-                            await p_in.fill(f"Dùng thoại bạn vừa soạn lại để tạo video Cảnh {scene_number} giúp mình ngay nhé (chuẩn 9:16, 10s, 60fps)")
-                            await asyncio.sleep(0.3)
-                            s_btn = await page.query_selector("button[aria-label='Gửi']")
-                            if s_btn:
-                                await s_btn.click()
-                            else:
-                                await p_in.press("Enter")
+                        clicked_opt = await page.evaluate("""() => {
+                            const candidates = Array.from(document.querySelectorAll('button, [role="button"], a, div[tabindex], div[class*="button"], span[class*="button"], div[class*="option"], div[class*="choice"], div[class*="suggestion"], div[class*="pill"]'));
+                            for (const c of candidates) {
+                                const txt = (c.innerText || c.textContent || '').trim().toLowerCase();
+                                if (txt.includes('dùng thoại') || txt.includes('soạn lại này') || txt.includes('thoại mình soạn') || txt.includes('dùng thoại sạch')) {
+                                    const btn = c.closest('button, [role="button"], a') || c;
+                                    btn.click();
+                                    return txt;
+                                }
+                            }
+                            return null;
+                        }""")
+                        if clicked_opt:
+                            await log_fn(f"Đã tự động chọn '{clicked_opt}' trên Muse AI...", current_pct)
                             await asyncio.sleep(2)
+                        else:
+                            p_in = await page.query_selector("textarea, div[contenteditable='true']")
+                            if p_in:
+                                await p_in.fill(f"Dùng thoại bạn vừa soạn lại để tạo video Cảnh {scene_number} giúp mình ngay nhé (chuẩn 9:16, 10s, 60fps)")
+                                await asyncio.sleep(0.3)
+                                s_btn = await page.query_selector("button[aria-label='Gửi'], button[type='submit']")
+                                if s_btn:
+                                    await s_btn.click()
+                                else:
+                                    await p_in.press("Enter")
+                                await asyncio.sleep(2)
                     except Exception as ex_cd:
                         logger.debug(f"Clean dialogue confirm send error: {ex_cd}")
                 elif muse_state == 'redo' and not is_muse_busy:

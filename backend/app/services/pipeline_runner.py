@@ -153,6 +153,12 @@ def _clean_clause(text: str, max_words: int = 24, fallback: str = "") -> str:
     cleaned = re.sub(r'(?i)\bviền\s+may\s+\d+\s+đường[^\.\,\!\?]*', '', cleaned)
     cleaned = re.sub(r'(?i)\bquanh\s+vi[eế][\w]*\b', '', cleaned)
     cleaned = re.sub(r'(?i)\b[a-z0-9_-]+\.(jpg|jpeg|png|webp|mp4)\b', '', cleaned)
+    cleaned = re.sub(r'(?i)\b\d+[\.,]?\d*\s*x\s*\d+\b', '', cleaned)
+    cleaned = re.sub(r'(?i)\bvới\s+paylater[^\.\,\!\?]*', '', cleaned)
+    cleaned = re.sub(r'(?i)\bpaylater[^\.\,\!\?]*', '', cleaned)
+    cleaned = re.sub(r'(?i)\bspaylater[^\.\,\!\?]*', '', cleaned)
+    cleaned = re.sub(r'(?i)\btối\s+đa\s+\d+\s+(triệu|tr|k)\b', '', cleaned)
+    cleaned = re.sub(r'(?i)\btrả\s+góp[^\.\,\!\?]*', '', cleaned)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
     for bad in [
@@ -1060,6 +1066,10 @@ class PipelineRunner:
                     "highlights": project.get("highlights", "Thiết kế chính hãng, chi tiết sắc nét"),
                     "target_customer": project.get("target_customer", "Khách hàng tiêu dùng thông thái")
                 })
+                from backend.app.services.prompt_templates import get_product_physical_scale_hint
+                scale_hint = get_product_physical_scale_hint(project.get("name", ""), project.get("category", ""))
+                if scale_hint and scale_hint not in char_prompt:
+                    char_prompt = char_prompt + scale_hint
 
                 char_res = None
                 if gemini_api_service.is_configured():
@@ -1251,6 +1261,19 @@ class PipelineRunner:
                 await db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
                 await db.commit()
 
+            # Discard stale Scene 1 video if it was generated before the current character image was created
+            if v1_path and char_image_path and os.path.exists(char_image_path):
+                try:
+                    if os.path.getmtime(v1_path) < os.path.getmtime(char_image_path) - 2.0:
+                        logger.info("Discarding stale Scene 1 video created before current character image")
+                        try: os.unlink(v1_path)
+                        except Exception: pass
+                        v1_path = None
+                        await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 1", (project_id,))
+                        await db.commit()
+                except Exception:
+                    pass
+
             # Discard stale showcase demo videos (4837882 bytes or 9671950 bytes from old landing page loops)
             if v1_path and os.path.exists(v1_path) and os.path.getsize(v1_path) in [4837882, 9671950]:
                 logger.info("Discarding stale demo showcase video for Scene 1")
@@ -1331,6 +1354,15 @@ class PipelineRunner:
                             except Exception as ex_retry:
                                 logger.warning(f"Muse retry 1 failed: {ex_retry}")
 
+                        if not v1_path:
+                            await update_status("Tạo video Cảnh 1", 71, "Đang kiểm tra kết quả video Cảnh 1 từ Muse AI lần cuối...")
+                            await asyncio.sleep(4)
+                            pull_chk = await muse_automator.pull_project_videos(project_id)
+                            if pull_chk.get("s1_ok"):
+                                s1_cand = str(PROJECTS_DIR / project_id / "videos" / "scene1.mp4")
+                                if os.path.exists(s1_cand) and os.path.getsize(s1_cand) > 10000:
+                                    v1_path = s1_cand
+
                     if not v1_path:
                         await update_status("Chờ Cảnh 1", 72, "Muse AI chưa tạo xong video Cảnh 1. Vui lòng bấm 'Lấy Video từ Muse AI' hoặc tạo lại Cảnh 1...", status="failed")
                         return {"success": False, "error": "Chưa có video Cảnh 1 từ Muse AI."}
@@ -1367,6 +1399,19 @@ class PipelineRunner:
                 v2_path = None
                 await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
                 await db.commit()
+
+            # Discard stale Scene 2 video if it was generated before current character image
+            if v2_path and char_image_path and os.path.exists(char_image_path):
+                try:
+                    if os.path.getmtime(v2_path) < os.path.getmtime(char_image_path) - 2.0:
+                        logger.info("Discarding stale Scene 2 video created before current character image")
+                        try: os.unlink(v2_path)
+                        except Exception: pass
+                        v2_path = None
+                        await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = 2", (project_id,))
+                        await db.commit()
+                except Exception:
+                    pass
 
             # Discard stale showcase demo videos
             if v2_path and os.path.exists(v2_path) and os.path.getsize(v2_path) in [4837882, 9671950]:
@@ -1458,6 +1503,16 @@ class PipelineRunner:
                                         v2_path = cand_v2
                             except Exception as ex_retry2:
                                 logger.warning(f"Muse retry 2 failed: {ex_retry2}")
+
+                        if not v2_path:
+                            await update_status("Tạo video Cảnh 2", 84, "Đang kiểm tra kết quả video Cảnh 2 từ Muse AI lần cuối...")
+                            await asyncio.sleep(4)
+                            pull_chk2 = await muse_automator.pull_project_videos(project_id)
+                            if pull_chk2.get("s2_ok"):
+                                s2_cand = str(PROJECTS_DIR / project_id / "videos" / "scene2.mp4")
+                                if os.path.exists(s2_cand) and os.path.getsize(s2_cand) > 10000:
+                                    if not v1_path or os.path.getsize(v1_path) != os.path.getsize(s2_cand):
+                                        v2_path = s2_cand
 
                     if not v2_path:
                         await update_status("Chờ Cảnh 2", 84, "Muse AI chưa tạo xong video Cảnh 2. Hệ thống dừng chờ Cảnh 2 hoàn tất (tuyệt đối không ghép khi thiếu Cảnh 2)!", status="failed")

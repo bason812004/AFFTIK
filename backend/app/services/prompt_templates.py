@@ -110,9 +110,16 @@ def sanitize_tiktok_dialogue(text: str) -> str:
         clean_words.append(w)
     
     res = " ".join(clean_words)
+    # Clean dangling prepositions left behind after stripping OCR/PayLater noise
+    res = re.sub(
+        r'\b(với|từ|bởi|bằng|sở hữu|có|được trang bị|được hoàn thiện với|nổi bật với)\s*[,.\s]+(?=Hôm nay|Đang có|Nhờ|Với|cả nhà|các bác|anh em|bà con|các sen|bấm ngay|nhanh tay|giỏ hàng)',
+        'với thiết kế cao cấp bền đẹp, ',
+        res,
+        flags=re.IGNORECASE
+    )
     res = re.sub(r'([,\.!?;:])\s*([,\.!?;:])+', r'\1', res)
     res = re.sub(r'\s+([,\.!?;:])', r'\1', res)
-    res = re.sub(r'\s+', ' ', res).strip()
+    res = re.sub(r'\s{2,}', ' ', res).strip()
     return res
 
 DEFAULT_SYSTEM_PROMPTS = [
@@ -133,15 +140,21 @@ Bố trí khu vực trưng bày sản phẩm nổi bật ở tiền cảnh. Phí
 
 Không gian có chiều sâu tự nhiên, bố cục gọn gàng, tinh tế, thể hiện hình ảnh một cửa hàng uy tín với phong cách thương hiệu cao cấp. Có thể bổ sung quầy tư vấn, tủ trưng bày và bảng thông tin sản phẩm phù hợp với ngành hàng, nhưng không để các chi tiết này che khuất sản phẩm chính.
 
-## 2. KHÓA SẢN PHẨM – BẮT BUỘC GIỮ NGUYÊN 100%
+## 2. KHÓA SẢN PHẨM & TUÂN THỦ TUYỆT ĐỐI TỶ LỆ KÍCH THƯỚC VẬT LÝ THỰC TẾ (1:1 SCALE)
 
-Sử dụng chính xác sản phẩm trong hình ảnh tham chiếu. Giữ nguyên tuyệt đối hình dáng, kích thước, tỷ lệ, màu sắc, chất liệu, cấu trúc, thiết kế, logo, chữ viết và toàn bộ chi tiết gốc.
+Sử dụng chính xác sản phẩm trong hình ảnh tham chiếu. Giữ nguyên tuyệt đối 100% hình dáng, kích thước thật, tỷ lệ chuẩn xác, màu sắc, chất liệu, cấu trúc, thiết kế, logo, chữ viết và toàn bộ chi tiết gốc.
 
 Tuyệt đối không thiết kế lại, không thay đổi màu sắc, không bóp méo, không kéo giãn, không làm biến dạng, không thêm hoặc xóa bất kỳ chi tiết nào trên sản phẩm.
 
-Đặt sản phẩm trên một bàn trưng bày cao cấp hoặc bục trưng bày sang trọng phù hợp với kích thước và công năng của sản phẩm. Sản phẩm nằm ở tiền cảnh, gần máy ảnh, chiếm vị trí nổi bật, nhìn thấy đầy đủ từ trên xuống dưới và từ trái sang phải, không bị cắt mất bất kỳ phần nào.
+QUY TẮC TỶ LỆ KÍCH THƯỚC VẬT LÝ BẮT BUỘC:
+- Tỷ lệ kích thước sản phẩm so với cơ thể và bàn tay người mẫu PHẢI TUÂN THEO ĐÚNG THỰC TẾ ĐỜI THƯỜNG (real-world true physical scale 1:1).
+- VỚI CÁC SẢN PHẨM NHỎ GỌN CẦM TAY (như dây sạc, cáp sạc, củ sạc, tai nghe, điện thoại, mỹ phẩm, thỏi son, trang sức, phụ kiện công nghệ):
+  + Bắt buộc giữ kích thước nhỏ nhắn, thanh mảnh chuẩn đời thực (ví dụ: dây sạc là sợi dây mềm mại đường kính chỉ 3–4mm, cuộn dây nhỏ gọn khoảng 8–10cm nằm gọn gàng trong lòng bàn tay người mẫu hoặc đặt trên khay/giá đỡ phụ kiện nhỏ trên bàn; đầu cắm sạc chỉ nhỏ bằng đốt ngón tay).
+  + TUYỆT ĐỐI KHÔNG PHÓNG ĐẠI sản phẩm nhỏ thành khổng lồ (nghiêm cấm vẽ dây sạc to dày như ống nước tưới cây hay ống cứu hỏa, củ sạc không to như cục gạch).
+  + Cách bố trí phù hợp nhất: Người mẫu nâng hoặc cầm nhẹ nhàng sản phẩm trên một hoặc hai bàn tay ngang ngực/bụng để giới thiệu (bàn tay người mẫu là mốc tỷ lệ tự nhiên để thấy rõ kích thước nhỏ gọn tinh xảo của sản phẩm), HOẶC đặt sản phẩm gọn gàng trên một khay phụ kiện / giá đỡ nhỏ chuyên dụng trên mặt bàn.
+- VỚI CÁC SẢN PHẨM VỪA VÀ LỚN (ấm đun, bình nước, hộp bánh kẹo, túi xách, xô phân bón, đồ gia dụng): Đặt sản phẩm ngay ngắn trên bàn trưng bày cao cấp hoặc người mẫu ôm/bưng tự nhiên, tỷ lệ cân đối với người mẫu và mặt bàn.
+Mặt trước sản phẩm hướng thẳng về phía máy ảnh, hạn chế góc nghiêng để thấy rõ thiết kế, logo và các chi tiết.
 
-Sản phẩm có kích thước chân thực, nổi bật nhưng không phóng đại quá mức. Mặt trước sản phẩm hướng thẳng về phía máy ảnh, hạn chế góc nghiêng để thấy rõ thiết kế, logo và các chi tiết.
 ## 3. NGƯỜI MẪU NỮ CAO CẤP
 
 Một người mẫu nữ Việt Nam 21 tuổi, xinh đẹp nổi bật, gương mặt thanh tú, đường nét hài hòa, đôi mắt sáng có thần, làn da tự nhiên, mái tóc được tạo kiểu tinh tế và lớp trang điểm nhẹ nhàng sang trọng.
@@ -154,9 +167,11 @@ Khuôn mặt, đôi mắt, mái tóc, trang phục và bàn tay của người m
 
 ## 4. BỐ CỤC VÀ KHOẢNG CÁCH MÁY ẢNH
 
-Khung hình dọc 9:16, góc máy chính diện, bố cục quảng cáo thương mại chuyên nghiệp.
+Khung hình dọc 9:16, góc máy chính diện, bố cục quảng cáo thương mại chuyên nghiệp, góc chụp bán thân hoặc trung cảnh (medium shot / medium close-up).
 
-Đưa sản phẩm và người mẫu lại gần máy ảnh hơn, tạo cảm giác gần gũi và nổi bật. Sản phẩm chiếm phần lớn tiền cảnh nhưng vẫn giữ nguyên tỷ lệ thực tế và hiển thị trọn vẹn. Người mẫu đứng ngay cạnh sản phẩm để cả hai trở thành hai chủ thể chính trong khung hình.
+Người mẫu và sản phẩm là hai chủ thể chính hài hòa trong khung hình. Người mẫu đứng gần máy ảnh, sản phẩm giữ nguyên 100% kích thước thực tế đời thực (1:1 true physical scale):
+- Với các sản phẩm nhỏ cầm tay (dây sạc, cáp sạc, củ sạc, tai nghe, điện thoại, mỹ phẩm, trang sức): người mẫu cầm hoặc nâng nhẹ nhàng trên bàn tay ngang ngực/bụng hoặc đặt trên khay phụ kiện nhỏ trên bàn; tỷ lệ sản phẩm cân đối tự nhiên với bàn tay người mẫu, TUYỆT ĐỐI KHÔNG phóng to sản phẩm nhỏ thành khổng lồ choán hết tiền cảnh.
+- Với các sản phẩm vừa và lớn (ấm siêu tốc, máy móc, xô phân bón, đồ gia dụng): đặt ngay ngắn trên bàn trưng bày hoặc người mẫu ôm/bưng tự nhiên, tỷ lệ chuẩn xác so với vóc dáng người mẫu và mặt bàn.
 
 Không để người mẫu đứng quá xa. Không để quầy kệ hoặc vật dụng trong cửa hàng che khuất sản phẩm. Cân đối khoảng trống phía trên và hai bên, tạo cảm giác sang trọng, rõ ràng và dễ nhìn.
 
@@ -181,12 +196,11 @@ Giữ nguyên chính xác hình dáng, màu sắc, tỷ lệ và nội dung logo
 
 ## 8. CHẤT LƯỢNG HÌNH ẢNH
 
-Ảnh quảng cáo sản phẩm siêu chân thực 8K, chi tiết cao, độ nét cao, màu sắc trung thực, ánh sáng trắng đồng đều, chất liệu chân thực, bố cục sang trọng, phong cách nhiếp ảnh quảng cáo chuyên nghiệp. Sản phẩm và người mẫu là hai điểm thu hút chính, nổi bật rõ ràng ngay từ cái nhìn đầu tiên.
-chỉnh sửa sao cho kích thước sản phẩm hợp lý
+Ảnh quảng cáo sản phẩm siêu chân thực 8K, chi tiết cao, độ nét cao, màu sắc trung thực, ánh sáng trắng đồng đều, chất liệu chân thực, bố cục sang trọng, phong cách nhiếp ảnh quảng cáo chuyên nghiệp. Sản phẩm và người mẫu là hai điểm thu hút chính, nổi bật rõ ràng ngay từ cái nhìn đầu tiên với tỷ lệ kích thước vật lý chuẩn xác 1:1 đời thực.
 
 ## 9. NEGATIVE PROMPT – CÁC LỖI CẦN TRÁNH
 
-Không sai sản phẩm, không đổi thiết kế, không đổi màu, không bóp méo, không kéo giãn, không sai tỷ lệ, không sai logo, không chữ sai, không thêm chi tiết lạ, không mất chi tiết gốc, không cắt cụt sản phẩm, không phóng đại sản phẩm quá mức, không làm mờ sản phẩm, không làm mờ người mẫu, không lấy nét sai, không xóa phông quá mạnh, không bokeh quá mức, không nhòe chuyển động, không ánh sáng tối, không ám vàng, không bóng đổ gắt, không cháy sáng, không da nhựa, không gương mặt biến dạng, không tay lỗi, không thừa ngón tay, không cửa hàng bừa bộn, không nội thất cũ kỹ, không bối cảnh nhà máy hoặc kho hàng, không thêm sản phẩm không liên quan, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hoặc CGI giả tạo."""
+Không sai sản phẩm, không đổi thiết kế, không đổi màu, không bóp méo, không kéo giãn, không sai tỷ lệ, không phóng đại kích thước sản phẩm, không biến phụ kiện nhỏ thành vật thể khổng lồ, không vẽ dây sạc/cáp sạc to dày như ống nước tưới cây hoặc dây cứu hỏa, không củ sạc to như cục gạch, no oversized accessories, no giant cables, no thick hose, no oversized products, không sai logo, không chữ sai, không thêm chi tiết lạ, không mất chi tiết gốc, không cắt cụt sản phẩm, không làm mờ sản phẩm, không làm mờ người mẫu, không lấy nét sai, không xóa phông quá mạnh, không bokeh quá mức, không nhòe chuyển động, không ánh sáng tối, không ám vàng, không bóng đổ gắt, không cháy sáng, không da nhựa, không gương mặt biến dạng, không tay lỗi, không thừa ngón tay, không cửa hàng bừa bộn, không nội thất cũ kỹ, không bối cảnh nhà máy hoặc kho hàng, không thêm sản phẩm không liên quan, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hoặc CGI giả tạo."""
     },
     {
         "id": "sys_prompt_char_warehouse",
@@ -221,9 +235,13 @@ Bối cảnh là bên trong một nhà máy / xưởng sản xuất và tổng k
 Ở tiền cảnh và trung cảnh là lối đi bê tông rộng rãi giữa các dãy hàng. Hai bên lối đi chất đầy các kiện hàng sản phẩm {{product_name}} được xếp ngay ngắn, cao ngất ngưởng trên các pallet gỗ công nghiệp thành tầng tầng lớp lớp bạt ngàn, thể hiện nguồn hàng xuất xưởng dồi dào, tận gốc.
 Phía xa hậu cảnh có các công nhân mặc áo đồng phục công nhân màu xanh dương, đội mũ lưỡi trai đang làm việc, bốc xếp và kiểm hàng, tạo bầu không khí xưởng sản xuất tấp nập, chân thực và uy tín 100%.
 
-## 2. KHÓA SẢN PHẨM 100% TỪ ẢNH THAM CHIẾU
+## 2. KHÓA SẢN PHẨM 100% TỪ ẢNH THAM CHIẾU & TUÂN THỦ TỶ LỆ KÍCH THƯỚC VẬT LÝ 1:1
 Sử dụng chính xác sản phẩm {{product_name}} trong hình ảnh tham chiếu. Giữ nguyên 100% hình dáng, chi tiết, cấu trúc, màu sắc, hoa văn, viền may, khoen khuy và chất liệu thật của sản phẩm.
 Tuyệt đối không thay đổi màu sắc, không biến dạng, không sáng tạo sản phẩm khác không liên quan.
+QUY TẮC TỶ LỆ KÍCH THƯỚC VẬT LÝ ĐỜI THỰC BẮT BUỘC (1:1 TRUE PHYSICAL SCALE):
+- Giữ nguyên 100% tỷ lệ kích thước thật của {{product_name}} so với người mẫu và không gian xưởng.
+- VỚI CÁC SẢN PHẨM NHỎ GỌN CẦM TAY (như dây sạc, cáp sạc, củ sạc, tai nghe, điện thoại, mỹ phẩm, thỏi son): Bắt buộc giữ kích thước nhỏ nhắn, thanh mảnh chuẩn đời thực (ví dụ: dây sạc là sợi mềm mảnh đường kính 3–4mm, cuộn dây nhỏ khoảng 8–10cm nằm gọn gàng trong lòng bàn tay người mẫu; đầu cắm sạc chỉ nhỏ bằng đốt ngón tay). Tuyệt đối không phóng to dây sạc to dày như ống nước tưới cây hay ống cứu hỏa. Người mẫu nâng nhẹ nhàng sản phẩm hoặc hộp sản phẩm trên tay ngang ngực; các pallet phía sau là các kiện thùng carton đóng gói sản phẩm.
+- VỚI CÁC SẢN PHẨM VỪA VÀ LỚN (bạt xếp, thùng sơn, xô phân bón, ấm đun, máy móc): Người mẫu nâng, bưng hoặc đứng bên cạnh sản phẩm với tỷ lệ chuẩn xác so với cơ thể.
 
 ## 3. NGƯỜI MẪU NỮ TRẺ TRUNG TẠI XƯỞNG
 Một người mẫu nữ Việt Nam khoảng 21-25 tuổi, gương mặt thanh tú xinh xắn, nụ cười rạng rỡ, thần thái tự tin, gần gũi và hào sảng. Mái tóc đen ngắn ngang vai tự nhiên, lớp trang điểm nhẹ nhàng tươi tắn.
@@ -235,7 +253,7 @@ Trang phục phong cách nhân viên / chủ xưởng trẻ trung, năng động
 - Có kẹp một chiếc micro thu âm cài áo không dây màu đen nhỏ gọn (wireless lavalier microphone) ở cổ áo trước ngực.
 
 Tư thế và hành động:
-Người mẫu đứng hoặc bước đi tự nhiên dọc theo lối đi xưởng, hai tay nâng và ôm trọn cọc sản phẩm {{product_name}} ở phía trước người ngang bụng, hướng thẳng về máy ảnh để thấy rõ chi tiết sản phẩm. Một tay giữ sản phẩm, tay kia tươi cười chỉ về phía các dãy pallet hàng bạt ngàn phía sau như đang giới thiệu kho hàng giá xuất xưởng trực tiếp cho khách hàng.
+Người mẫu đứng hoặc bước đi tự nhiên dọc theo lối đi xưởng. Với sản phẩm vừa/lớn, hai tay nâng hoặc ôm tự nhiên sản phẩm {{product_name}} ở phía trước người ngang bụng; với sản phẩm nhỏ gọn cầm tay (dây sạc, tai nghe, củ sạc), người mẫu cầm hoặc nâng nhẹ nhàng sản phẩm trên lòng bàn tay ngang ngực hướng về máy ảnh. Một tay giữ sản phẩm, tay kia tươi cười chỉ về phía các dãy pallet hàng bạt ngàn phía sau như đang giới thiệu kho hàng giá xuất xưởng trực tiếp cho khách hàng.
 
 ## 4. GÓC MÁY & CHẤT LƯỢNG HÌNH ẢNH 8K
 Khung hình dọc 9:16 chuẩn video TikTok, góc chụp chính diện ngang tầm mắt (eye-level shot).
@@ -244,7 +262,7 @@ Lấy nét cực rõ đồng thời vào cả sản phẩm {{product_name}} và 
 Ánh sáng tự nhiên nhà xưởng kết hợp đèn công nghiệp trung tính 5500K, màu sắc trung thực, không ám vàng, không cháy sáng.
 
 ## 5. NEGATIVE PROMPT (CÁC LỖI CẦN TRÁNH)
-Không sai sản phẩm tham chiếu, không đổi màu sản phẩm, không biến dạng, không mặt nhựa bóng, không da sáp, không tay thừa ngón, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hay CGI giả tạo, không bối cảnh studio phông bạt nhân tạo."""
+Không sai sản phẩm tham chiếu, không đổi màu sản phẩm, không biến dạng, không phóng đại kích thước sản phẩm, không biến phụ kiện nhỏ thành vật thể khổng lồ, không vẽ dây sạc/cáp sạc to dày như ống nước tưới cây hoặc dây cứu hỏa, không củ sạc khổng lồ, no oversized accessories, no giant cables, no thick hose, no oversized products, không mặt nhựa bóng, không da sáp, không tay thừa ngón, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hay CGI giả tạo, không bối cảnh studio phông bạt nhân tạo."""
     },
     {
         "id": "sys_prompt_script_factory_direct",
@@ -387,3 +405,29 @@ def render_prompt(template_content: str, context: Dict[str, Any]) -> str:
         str_val = str(val) if val is not None else ""
         result = result.replace(placeholder, str_val)
     return result
+
+def get_product_physical_scale_hint(product_name: str, category: str = "") -> str:
+    """
+    Returns an explicit, high-priority real-world physical 1:1 scale constraint
+    for small gadgets (charging cables, chargers, earbuds, cosmetics, jewelry)
+    to prevent AI image generators (Gemini/Imagen 3) from scaling them into giant hoses or boulders.
+    """
+    combined = f"{product_name} {category}".lower()
+    if any(k in combined for k in ["day sac", "dây sạc", "cap sac", "cáp sạc", "sac", "sạc", "cable", "cu sac", "củ sạc", "adapter", "pd 20w", "pd 30w", "type c", "lightning"]):
+        return (
+            "\n\n[QUY TẮC BẮT BUỘC VỀ TỶ LỆ KÍCH THƯỚC DÂY SẠC / CỦ SẠC - 1:1 TRUE PHYSICAL SCALE]:\n"
+            "- ĐÂY LÀ PHỤ KIỆN CÔNG NGHỆ NHỎ GỌN CẦM TAY: sợi dây sạc thanh mảnh mềm mại đường kính chỉ 3–4mm, cuộn dây nhỏ gọn khoảng 8–10cm nằm gọn gàng trong lòng bàn tay người mẫu hoặc đặt trên khay phụ kiện nhỏ trên bàn.\n"
+            "- Người mẫu nâng nhẹ nhàng cuộn dây sạc trên bàn tay hoặc hai bàn tay trước ngực; lòng bàn tay người mẫu là mốc tỷ lệ kích thước thật.\n"
+            "- TUYỆT ĐỐI KHÔNG phóng đại dây sạc to dày như ống nước tưới cây hay ống cứu hỏa. Đầu cắm sạc chỉ nhỏ bằng đốt ngón tay (no giant cables, no thick hose, no oversized accessories)."
+        )
+    elif any(k in combined for k in ["tai nghe", "earphone", "headphone", "airpod", "bluetooth", "mic"]):
+        return (
+            "\n\n[QUY TẮC BẮT BUỘC VỀ TỶ LỆ KÍCH THƯỚC TAI NGHE / PHỤ KIỆN - 1:1 SCALE]:\n"
+            "- Kích thước tai nghe/hộp sạc nhỏ gọn đời thực nằm lọt trong lòng bàn tay người mẫu, tỉ lệ thật 1:1, không phóng đại (no oversized accessories)."
+        )
+    elif any(k in combined for k in ["son", "lipstick", "serum", "kem", "my pham", "mỹ phẩm", "nuoc hoa", "trang sức", "dong ho", "nhan", "vong"]):
+        return (
+            "\n\n[QUY TẮC BẮT BUỘC VỀ TỶ LỆ KÍCH THƯỚC SẢN PHẨM NHỎ GỌN - 1:1 SCALE]:\n"
+            "- Sản phẩm nhỏ gọn cầm vừa vặn trong lòng bàn tay người mẫu hoặc đặt trên khay trang điểm/phụ kiện nhỏ, tỉ lệ chuẩn 1:1 đời thực."
+        )
+    return ""

@@ -998,7 +998,8 @@ async def get_project(project_id: str, db = Depends(get_db)):
         p_cur = await db.execute("SELECT content FROM prompts WHERE id = 'sys_prompt_char_gen' OR (category = 'character_gen' AND is_default = 1) LIMIT 1")
         p_tpl = await p_cur.fetchone()
         char_tpl = p_tpl["content"] if p_tpl else DEFAULT_SYSTEM_PROMPTS[0]["content"]
-        project["character_prompt"] = render_prompt(char_tpl, {
+        from backend.app.services.prompt_templates import get_product_physical_scale_hint
+        base_char_prompt = render_prompt(char_tpl, {
             "product_name": project.get("name", "Sản phẩm thương mại"),
             "category": project.get("category", "Thương mại & Bán lẻ"),
             "description": project.get("description", ""),
@@ -1006,6 +1007,8 @@ async def get_project(project_id: str, db = Depends(get_db)):
             "highlights": project.get("highlights", "Thiết kế chính hãng, chi tiết sắc nét"),
             "target_customer": project.get("target_customer", "Khách hàng tiêu dùng thông thái")
         })
+        scale_hint = get_product_physical_scale_hint(project.get("name", ""), project.get("category", ""))
+        project["character_prompt"] = base_char_prompt + scale_hint if (scale_hint and scale_hint not in base_char_prompt) else base_char_prompt
     except Exception:
         project["character_prompt"] = DEFAULT_SYSTEM_PROMPTS[0]["content"]
 

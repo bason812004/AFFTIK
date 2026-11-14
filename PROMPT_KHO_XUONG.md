@@ -15,9 +15,13 @@ Bối cảnh là bên trong một nhà máy / xưởng sản xuất và tổng k
 Ở tiền cảnh và trung cảnh là lối đi bê tông rộng rãi giữa các dãy hàng. Hai bên lối đi chất đầy các kiện hàng sản phẩm {{product_name}} được xếp ngay ngắn, cao ngất ngưởng trên các pallet gỗ công nghiệp thành tầng tầng lớp lớp bạt ngàn, thể hiện nguồn hàng xuất xưởng dồi dào, tận gốc.
 Phía xa hậu cảnh có các công nhân mặc áo đồng phục công nhân màu xanh dương, đội mũ lưỡi trai đang làm việc, bốc xếp và kiểm hàng, tạo bầu không khí xưởng sản xuất tấp nập, chân thực và uy tín 100%.
 
-## 2. KHÓA SẢN PHẨM 100% TỪ ẢNH THAM CHIẾU
+## 2. KHÓA SẢN PHẨM 100% TỪ ẢNH THAM CHIẾU & TỶ LỆ KÍCH THƯỚC VẬT LÝ 1:1
 Sử dụng chính xác sản phẩm {{product_name}} trong hình ảnh tham chiếu. Giữ nguyên 100% hình dáng, kích thước, chi tiết cấu tạo, màu sắc, hoa văn, viền may, khoen khuy, logo và toàn bộ chữ in thật của sản phẩm.
 Tuyệt đối không thay đổi màu sắc, không bóp méo, không kéo giãn, không làm biến dạng, không thêm hoặc bớt bất kỳ chi tiết nào trên sản phẩm.
+QUY TẮC TỶ LỆ KÍCH THƯỚC VẬT LÝ ĐỜI THỰC BẮT BUỘC (1:1 TRUE PHYSICAL SCALE):
+- Giữ nguyên 100% tỷ lệ kích thước thật của sản phẩm so với cơ thể người mẫu và bối cảnh xưởng.
+- VỚI CÁC SẢN PHẨM NHỎ GỌN CẦM TAY (như dây sạc, cáp sạc, củ sạc, tai nghe, điện thoại, mỹ phẩm, thỏi son): Bắt buộc giữ kích thước nhỏ nhắn, thanh mảnh chuẩn đời thực (ví dụ: dây sạc là sợi mềm mảnh đường kính 3–4mm, cuộn dây nhỏ gọn 8–10cm nằm gọn gàng trong lòng bàn tay người mẫu; đầu cắm sạc chỉ nhỏ bằng đốt ngón tay). Tuyệt đối không phóng to dây sạc to dày như ống nước tưới cây hay ống cứu hỏa. Người mẫu nâng nhẹ nhàng sản phẩm hoặc hộp sản phẩm trên lòng bàn tay ngang ngực; các pallet phía sau là các kiện thùng carton đóng gói sản phẩm.
+- VỚI CÁC SẢN PHẨM VỪA VÀ LỚN (bạt xếp, thùng sơn, xô phân bón, ấm đun, máy móc): Người mẫu nâng, bưng hoặc đứng bên cạnh sản phẩm với tỷ lệ chuẩn xác so với cơ thể.
 
 ## 3. NGƯỜI MẪU NỮ TRẺ TRUNG TẠI XƯỞNG
 Một người mẫu nữ Việt Nam khoảng 21-25 tuổi, gương mặt thanh tú xinh xắn, nụ cười rạng rỡ, thần thái tự tin, gần gũi và hào sảng. Mái tóc đen ngắn ngang vai tự nhiên, lớp trang điểm nhẹ nhàng tươi tắn, làn da chân thực tự nhiên.
@@ -29,7 +33,7 @@ Trang phục phong cách nhân viên / chủ xưởng trẻ trung, năng động
 - Có kẹp một chiếc micro thu âm cài áo không dây màu đen nhỏ gọn (wireless lavalier microphone) ở cổ áo trước ngực.
 
 Tư thế và hành động:
-Người mẫu đứng hoặc bước đi tự nhiên dọc theo lối đi xưởng, hai tay nâng và ôm trọn cọc sản phẩm {{product_name}} ở phía trước người ngang bụng, hướng thẳng về máy ảnh để thấy rõ chi tiết sản phẩm. Một tay giữ sản phẩm, tay kia tươi cười chỉ về phía các dãy pallet hàng bạt ngàn phía sau như đang giới thiệu kho hàng giá xuất xưởng trực tiếp cho khách hàng.
+Người mẫu đứng hoặc bước đi tự nhiên dọc theo lối đi xưởng. Với sản phẩm vừa/lớn, hai tay nâng hoặc ôm tự nhiên sản phẩm {{product_name}} ở phía trước người ngang bụng; với sản phẩm nhỏ gọn cầm tay (dây sạc, tai nghe, củ sạc), người mẫu cầm hoặc nâng nhẹ nhàng sản phẩm trên lòng bàn tay ngang ngực hướng về máy ảnh. Một tay giữ sản phẩm, tay kia tươi cười chỉ về phía các dãy pallet hàng bạt ngàn phía sau như đang giới thiệu kho hàng giá xuất xưởng trực tiếp cho khách hàng.
 
 ## 4. GÓC MÁY & CHẤT LƯỢNG HÌNH ẢNH 8K
 Khung hình dọc 9:16 chuẩn video TikTok, góc chụp chính diện ngang tầm mắt (eye-level shot).
@@ -38,7 +42,7 @@ Lấy nét cực rõ đồng thời vào cả sản phẩm {{product_name}} và 
 Ánh sáng tự nhiên nhà xưởng kết hợp đèn công nghiệp trung tính 5500K, màu sắc trung thực, không ám vàng, không cháy sáng.
 
 ## 5. NEGATIVE PROMPT (CÁC LỖI CẦN TRÁNH)
-Không sai sản phẩm tham chiếu, không đổi màu sản phẩm, không biến dạng, không mặt nhựa bóng, không da sáp, không tay thừa ngón, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hay CGI giả tạo, không bối cảnh studio phông bạt nhân tạo.
+Không sai sản phẩm tham chiếu, không đổi màu sản phẩm, không biến dạng, không phóng đại kích thước sản phẩm, không biến phụ kiện nhỏ thành vật thể khổng lồ, không vẽ dây sạc/cáp sạc to dày như ống nước tưới cây hoặc dây cứu hỏa, không củ sạc khổng lồ, no oversized accessories, no giant cables, no thick hose, no oversized products, không mặt nhựa bóng, không da sáp, không tay thừa ngón, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hay CGI giả tạo, không bối cảnh studio phông bạt nhân tạo.
 ```
 
 ---

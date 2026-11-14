@@ -781,14 +781,21 @@ def _extract_packaging_clues_from_ocr(ocr_text: str) -> Dict[str, str]:
     title_candidates = []
 
     for line in clean_lines:
-        low = line.lower()
-        words = line.split()
-        if 2 <= len(words) <= 12 and is_valid_recognized_product_name(line):
-            title_candidates.append(line)
+        from backend.app.services.prompt_templates import sanitize_tiktok_dialogue
+        s_line = sanitize_tiktok_dialogue(line).strip()
+        low = s_line.lower()
+        norm_l = _normalize_text(s_line)
+        if any(bad in norm_l for bad in ["dubng", "tddng", "quanh vien", "paylater", "spaylater", "tra gop", "x 12"]):
+            continue
+        words = s_line.split()
+        if len(words) < 2:
+            continue
+        if 2 <= len(words) <= 12 and is_valid_recognized_product_name(s_line):
+            title_candidates.append(s_line)
         if any(bk in low for bk in benefit_keywords) and 3 <= len(words) <= 18:
-            benefit_parts.append(line.rstrip(".,;!"))
+            benefit_parts.append(s_line.rstrip(".,;!"))
         elif any(sk in low for sk in spec_keywords) and 2 <= len(words) <= 16:
-            spec_parts.append(line.rstrip(".,;!"))
+            spec_parts.append(s_line.rstrip(".,;!"))
 
     return {
         "ocr_title": title_candidates[0] if title_candidates else "",

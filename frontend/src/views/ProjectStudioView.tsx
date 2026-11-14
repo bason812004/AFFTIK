@@ -582,15 +582,21 @@ Bố trí khu vực trưng bày sản phẩm nổi bật ở tiền cảnh. Phí
 
 Không gian có chiều sâu tự nhiên, bố cục gọn gàng, tinh tế, thể hiện hình ảnh một cửa hàng uy tín với phong cách thương hiệu cao cấp. Có thể bổ sung quầy tư vấn, tủ trưng bày và bảng thông tin sản phẩm phù hợp với ngành hàng, nhưng không để các chi tiết này che khuất sản phẩm chính.
 
-## 2. KHÓA SẢN PHẨM – BẮT BUỘC GIỮ NGUYÊN 100%
+## 2. KHÓA SẢN PHẨM & TUÂN THỦ TUYỆT ĐỐI TỶ LỆ KÍCH THƯỚC VẬT LÝ THỰC TẾ (1:1 SCALE)
 
-Sử dụng chính xác sản phẩm trong hình ảnh tham chiếu. Giữ nguyên tuyệt đối hình dáng, kích thước, tỷ lệ, màu sắc, chất liệu, cấu trúc, thiết kế, logo, chữ viết và toàn bộ chi tiết gốc.
+Sử dụng chính xác sản phẩm trong hình ảnh tham chiếu. Giữ nguyên tuyệt đối 100% hình dáng, kích thước thật, tỷ lệ chuẩn xác, màu sắc, chất liệu, cấu trúc, thiết kế, logo, chữ viết và toàn bộ chi tiết gốc.
 
 Tuyệt đối không thiết kế lại, không thay đổi màu sắc, không bóp méo, không kéo giãn, không làm biến dạng, không thêm hoặc xóa bất kỳ chi tiết nào trên sản phẩm.
 
-Đặt sản phẩm trên một bàn trưng bày cao cấp hoặc bục trưng bày sang trọng phù hợp với kích thước và công năng của sản phẩm. Sản phẩm nằm ở tiền cảnh, gần máy ảnh, chiếm vị trí nổi bật, nhìn thấy đầy đủ từ trên xuống dưới và từ trái sang phải, không bị cắt mất bất kỳ phần nào.
+QUY TẮC TỶ LỆ KÍCH THƯỚC VẬT LÝ BẮT BUỘC:
+- Tỷ lệ kích thước sản phẩm so với cơ thể và bàn tay người mẫu PHẢI TUÂN THEO ĐÚNG THỰC TẾ ĐỜI THƯỜNG (real-world true physical scale 1:1).
+- VỚI CÁC SẢN PHẨM NHỎ GỌN CẦM TAY (như dây sạc, cáp sạc, củ sạc, tai nghe, điện thoại, mỹ phẩm, thỏi son, trang sức, phụ kiện công nghệ):
+  + Bắt buộc giữ kích thước nhỏ nhắn, thanh mảnh chuẩn đời thực (ví dụ: dây sạc là sợi dây mềm mại đường kính chỉ 3–4mm, cuộn dây nhỏ gọn khoảng 8–10cm nằm gọn gàng trong lòng bàn tay người mẫu hoặc đặt trên khay/giá đỡ phụ kiện nhỏ trên bàn; đầu cắm sạc chỉ nhỏ bằng đốt ngón tay).
+  + TUYỆT ĐỐI KHÔNG PHÓNG ĐẠI sản phẩm nhỏ thành khổng lồ (nghiêm cấm vẽ dây sạc to dày như ống nước tưới cây hay ống cứu hỏa, củ sạc không to như cục gạch).
+  + Cách bố trí phù hợp nhất: Người mẫu nâng hoặc cầm nhẹ nhàng sản phẩm trên một hoặc hai bàn tay ngang ngực/bụng để giới thiệu (bàn tay người mẫu là mốc tỷ lệ tự nhiên để thấy rõ kích thước nhỏ gọn tinh xảo của sản phẩm), HOẶC đặt sản phẩm gọn gàng trên một khay phụ kiện / giá đỡ nhỏ chuyên dụng trên mặt bàn.
+- VỚI CÁC SẢN PHẨM VỪA VÀ LỚN (ấm đun, bình nước, hộp bánh kẹo, túi xách, xô phân bón, đồ gia dụng): Đặt sản phẩm ngay ngắn trên bàn trưng bày cao cấp hoặc người mẫu ôm/bưng tự nhiên, tỷ lệ cân đối với người mẫu và mặt bàn.
+Mặt trước sản phẩm hướng thẳng về phía máy ảnh, hạn chế góc nghiêng để thấy rõ thiết kế, logo và các chi tiết.
 
-Sản phẩm có kích thước chân thực, nổi bật nhưng không phóng đại quá mức. Mặt trước sản phẩm hướng thẳng về phía máy ảnh, hạn chế góc nghiêng để thấy rõ thiết kế, logo và các chi tiết.
 ## 3. NGƯỜI MẪU NỮ CAO CẤP
 
 Một người mẫu nữ Việt Nam 21 tuổi, xinh đẹp nổi bật, gương mặt thanh tú, đường nét hài hòa, đôi mắt sáng có thần, làn da tự nhiên, mái tóc được tạo kiểu tinh tế và lớp trang điểm nhẹ nhàng sang trọng.
@@ -603,9 +609,11 @@ Khuôn mặt, đôi mắt, mái tóc, trang phục và bàn tay của người m
 
 ## 4. BỐ CỤC VÀ KHOẢNG CÁCH MÁY ẢNH
 
-Khung hình dọc 9:16, góc máy chính diện, bố cục quảng cáo thương mại chuyên nghiệp.
+Khung hình dọc 9:16, góc máy chính diện, bố cục quảng cáo thương mại chuyên nghiệp, góc chụp bán thân hoặc trung cảnh (medium shot / medium close-up).
 
-Đưa sản phẩm và người mẫu lại gần máy ảnh hơn, tạo cảm giác gần gũi và nổi bật. Sản phẩm chiếm phần lớn tiền cảnh nhưng vẫn giữ nguyên tỷ lệ thực tế và hiển thị trọn vẹn. Người mẫu đứng ngay cạnh sản phẩm để cả hai trở thành hai chủ thể chính trong khung hình.
+Người mẫu và sản phẩm là hai chủ thể chính hài hòa trong khung hình. Người mẫu đứng gần máy ảnh, sản phẩm giữ nguyên 100% kích thước thực tế đời thực (1:1 true physical scale):
+- Với các sản phẩm nhỏ cầm tay (dây sạc, cáp sạc, củ sạc, tai nghe, điện thoại, mỹ phẩm, trang sức): người mẫu cầm hoặc nâng nhẹ nhàng trên bàn tay ngang ngực/bụng hoặc đặt trên khay phụ kiện nhỏ trên bàn; tỷ lệ sản phẩm cân đối tự nhiên với bàn tay người mẫu, TUYỆT ĐỐI KHÔNG phóng to sản phẩm nhỏ thành khổng lồ choán hết tiền cảnh.
+- Với các sản phẩm vừa và lớn (ấm siêu tốc, máy móc, xô phân bón, đồ gia dụng): đặt ngay ngắn trên bàn trưng bày hoặc người mẫu ôm/bưng tự nhiên, tỷ lệ chuẩn xác so với vóc dáng người mẫu và mặt bàn.
 
 Không để người mẫu đứng quá xa. Không để quầy kệ hoặc vật dụng trong cửa hàng che khuất sản phẩm. Cân đối khoảng trống phía trên và hai bên, tạo cảm giác sang trọng, rõ ràng và dễ nhìn.
 
@@ -630,12 +638,11 @@ Giữ nguyên chính xác hình dáng, màu sắc, tỷ lệ và nội dung logo
 
 ## 8. CHẤT LƯỢNG HÌNH ẢNH
 
-Ảnh quảng cáo sản phẩm siêu chân thực 8K, chi tiết cao, độ nét cao, màu sắc trung thực, ánh sáng trắng đồng đều, chất liệu chân thực, bố cục sang trọng, phong cách nhiếp ảnh quảng cáo chuyên nghiệp. Sản phẩm và người mẫu là hai điểm thu hút chính, nổi bật rõ ràng ngay từ cái nhìn đầu tiên.
-chỉnh sửa sao cho kích thước sản phẩm hợp lý
+Ảnh quảng cáo sản phẩm siêu chân thực 8K, chi tiết cao, độ nét cao, màu sắc trung thực, ánh sáng trắng đồng đều, chất liệu chân thực, bố cục sang trọng, phong cách nhiếp ảnh quảng cáo chuyên nghiệp. Sản phẩm và người mẫu là hai điểm thu hút chính, nổi bật rõ ràng ngay từ cái nhìn đầu tiên với tỷ lệ kích thước vật lý chuẩn xác 1:1 đời thực.
 
 ## 9. NEGATIVE PROMPT – CÁC LỖI CẦN TRÁNH
 
-Không sai sản phẩm, không đổi thiết kế, không đổi màu, không bóp méo, không kéo giãn, không sai tỷ lệ, không sai logo, không chữ sai, không thêm chi tiết lạ, không mất chi tiết gốc, không cắt cụt sản phẩm, không phóng đại sản phẩm quá mức, không làm mờ sản phẩm, không làm mờ người mẫu, không lấy nét sai, không xóa phông quá mạnh, không bokeh quá mức, không nhòe chuyển động, không ánh sáng tối, không ám vàng, không bóng đổ gắt, không cháy sáng, không da nhựa, không gương mặt biến dạng, không tay lỗi, không thừa ngón tay, không cửa hàng bừa bộn, không nội thất cũ kỹ, không bối cảnh nhà máy hoặc kho hàng, không thêm sản phẩm không liên quan, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hoặc CGI giả tạo.`;
+Không sai sản phẩm, không đổi thiết kế, không đổi màu, không bóp méo, không kéo giãn, không sai tỷ lệ, không phóng đại kích thước sản phẩm, không biến phụ kiện nhỏ thành vật thể khổng lồ, không vẽ dây sạc/cáp sạc to dày như ống nước tưới cây hoặc dây cứu hỏa, không củ sạc to như cục gạch, no oversized accessories, no giant cables, no thick hose, no oversized products, không sai logo, không chữ sai, không thêm chi tiết lạ, không mất chi tiết gốc, không cắt cụt sản phẩm, không làm mờ sản phẩm, không làm mờ người mẫu, không lấy nét sai, không xóa phông quá mạnh, không bokeh quá mức, không nhòe chuyển động, không ánh sáng tối, không ám vàng, không bóng đổ gắt, không cháy sáng, không da nhựa, không gương mặt biến dạng, không tay lỗi, không thừa ngón tay, không cửa hàng bừa bộn, không nội thất cũ kỹ, không bối cảnh nhà máy hoặc kho hàng, không thêm sản phẩm không liên quan, không chữ ngẫu nhiên, không watermark, không phong cách hoạt hình hoặc CGI giả tạo.`;
 
   const charPromptToUse = customCharPrompt || defaultFemaleCharPrompt;
 
