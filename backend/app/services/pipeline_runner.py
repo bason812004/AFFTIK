@@ -1233,7 +1233,7 @@ class PipelineRunner:
 
             # If force_regenerate or if project is starting from the beginning:
             # Strictly wipe any old video files or exports on disk and DB so Scene 1 is NEVER skipped!
-            if force_regenerate or project.get("status") in ["image_uploaded", "character_created", "prompt_created"]:
+            if force_regenerate or project.get("status") in ["created", "image_uploaded", "character_created", "prompt_created", "scripts_created"]:
                 v1_path = None
                 (PROJECTS_DIR / project_id / "videos" / "scene1.mp4").unlink(missing_ok=True)
                 (PROJECTS_DIR / project_id / "videos" / "scene2.mp4").unlink(missing_ok=True)
@@ -1399,7 +1399,7 @@ class PipelineRunner:
                             scene_number=2,
                             prompt=scene2_prompt,
                             character_image_path=char_image_path or original_image,
-                            reference_image_path=original_image or char_image_path,
+                            reference_image_path=char_image_path or original_image,
                             on_log=lambda m, p: update_status("Tạo video Cảnh 2", int(75 + (p * 0.13)), m)
                         )
                 except Exception as e_v2:
@@ -1536,7 +1536,7 @@ class PipelineRunner:
                             scene_number=2,
                             prompt=scene2_prompt,
                             character_image_path=char_image_path or original_image,
-                            reference_image_path=original_image or char_image_path,
+                            reference_image_path=char_image_path or original_image,
                             progress_callback=lambda m, p: update_status("Tạo video Cảnh 2", int(80 + (p * 0.08)), m)
                         )
                         if v2_retry.get("success") and v2_retry.get("video_path") and os.path.exists(v2_retry["video_path"]):

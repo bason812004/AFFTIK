@@ -550,16 +550,23 @@ export const ProjectStudioView: React.FC<ProjectStudioViewProps> = ({
   }, [studioMode, activeTab, effectiveId, onProjectCreated]);
 
   // Stepper calculations
-  const stepHasS1 = Boolean(project?.videos && project.videos.some((v: any) => v.scene_number === 1));
-  const stepHasS2 = Boolean(project?.videos && project.videos.some((v: any) => v.scene_number === 2));
+  const s1Obj = project?.videos?.find((v: any) => v.scene_number === 1);
+  const s2Obj = project?.videos?.find((v: any) => v.scene_number === 2);
+  const stepHasS1 = Boolean(s1Obj);
+  const stepHasS2 = Boolean(s2Obj);
+  const stepIsDup = Boolean(
+    s1Obj && s2Obj &&
+    ((s1Obj.file_size && s2Obj.file_size && s1Obj.file_size === s2Obj.file_size) ||
+     (s1Obj.video_path && s2Obj.video_path && s1Obj.video_path === s2Obj.video_path))
+  );
   const steps = [
     { id: 1, label: 'Tạo dự án', done: true },
     { id: 2, label: 'Ảnh sản phẩm', done: !!project?.original_image_path },
     { id: 3, label: 'Nhân vật AI', done: !!project?.primary_character_image_path },
     { id: 4, label: 'Prompt & Kịch bản', done: project?.scripts && project.scripts.length > 0 },
     { id: 5, label: 'Video Cảnh 1', done: stepHasS1 },
-    { id: 6, label: 'Video Cảnh 2', done: stepHasS2 },
-    { id: 7, label: 'Ghép Video Hoàn Thành', done: !!project?.export && stepHasS1 && stepHasS2 },
+    { id: 6, label: 'Video Cảnh 2', done: stepHasS2 && !stepIsDup },
+    { id: 7, label: 'Ghép Video Hoàn Thành', done: !!project?.export && stepHasS1 && stepHasS2 && !stepIsDup },
   ];
 
   // Female Model Master Prompt (Chuẩn 9 phần)
@@ -1330,14 +1337,19 @@ Không sai sản phẩm, không đổi thiết kế, không đổi màu, không 
     const cleanPrompt = (promptRaw || '').trim();
     const cleanDlg = (dialogueRaw || '').trim();
     if (!cleanDlg) return cleanPrompt;
-    // Strip generic placeholder without dialogue
+    // If prompt already includes dialogue or standard speech clause, return as is!
+    if (
+      cleanPrompt.includes(cleanDlg) ||
+      cleanPrompt.includes(cleanDlg.slice(0, Math.min(28, cleanDlg.length))) ||
+      cleanPrompt.includes('Nhân vật nói tiếng Việt')
+    ) {
+      return cleanPrompt;
+    }
     const stripped = cleanPrompt
       .replace(/Khẩu hình miệng khớp 42 từ lời thoại Cảnh [12]\.?/gi, '')
       .trim();
-    if (stripped.includes(cleanDlg.slice(0, Math.min(28, cleanDlg.length)))) {
-      return stripped;
-    }
-    return `${stripped}\n\nLỜI THOẠI NHÂN VẬT ĐỌC CẢNH ${sceneNum} (42 từ - Giọng nữ miền Bắc khớp khẩu hình miệng): "${cleanDlg}"`;
+    const wordsCount = cleanDlg.split(/\s+/).filter(Boolean).length;
+    return `${stripped} Nhân vật nói tiếng Việt rõ ràng trọn vẹn hết câu trong 10 giây (${wordsCount} từ): "${cleanDlg}" (Không chèn chữ, không phụ đề).`;
   };
 
   const dynamicFallbackScript = {
@@ -1418,9 +1430,7 @@ Không sai sản phẩm, không đổi thiết kế, không đổi màu, không 
   const buildCopyPayloadForScene = (sceneNum: 1 | 2): string => {
     const promptPart = ((sceneNum === 1 ? currentScriptOpt.scene1_prompt_veo : currentScriptOpt.scene2_prompt_veo) || '').trim();
     const dialoguePart = ((sceneNum === 1 ? currentScriptOpt.scene1_dialogue : currentScriptOpt.scene2_dialogue) || '').trim();
-    const fullPrompt = ensurePromptIncludesDialogue(promptPart, dialoguePart, sceneNum);
-    if (!dialoguePart) return fullPrompt;
-    return `${fullPrompt}\n\nLỜI THOẠI NHÂN VẬT ĐỌC CẢNH ${sceneNum} (42 TỪ):\n"${dialoguePart}"`;
+    return ensurePromptIncludesDialogue(promptPart, dialoguePart, sceneNum);
   };
 
   const scene1Video = project.videos?.find((v: any) => v.scene_number === 1);

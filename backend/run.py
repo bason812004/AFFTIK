@@ -56,7 +56,7 @@ if __name__ == "__main__":
             host="127.0.0.1",
             port=8000,
             reload=False,
-            loop="asyncio.windows_events:ProactorEventLoop"
+            loop="asyncio"
         )
     else:
         uvicorn.run(

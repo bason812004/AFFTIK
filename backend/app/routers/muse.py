@@ -99,6 +99,12 @@ async def upload_manual_video(
     probe = await ffmpeg_service.probe_video(str(target_path))
     v_id = str(uuid.uuid4())[:8]
     await db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, scene_number))
+    await db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
+    exp_dir = PROJECTS_DIR / project_id / "exports"
+    if exp_dir.exists():
+        for ef in exp_dir.glob("*.mp4"):
+            try: ef.unlink(missing_ok=True)
+            except Exception: pass
     await db.execute("""
         INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
         VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')

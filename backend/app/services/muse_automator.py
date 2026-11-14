@@ -587,10 +587,9 @@ class MuseAutomator:
                 "div[contenteditable='true'], textarea"
             )
 
-            if scene_prompt.strip().startswith(f"[Cảnh {scene_number}"):
-                formatted_prompt = scene_prompt.strip()
-            else:
-                formatted_prompt = f"[Cảnh {scene_number} - {pname} | 9:16, 10s, 60fps] {scene_prompt}"
+            # Normalize prompt: strip ANY existing [Cảnh ...] headers and add exactly ONE clean header
+            clean_body = re.sub(r'(\[Cảnh\s*\d+[^\]]*\]\s*)+', '', scene_prompt).strip()
+            formatted_prompt = f"[Cảnh {scene_number} - {pname} | 9:16, 10s, 60fps] {clean_body}"
             formatted_prompt = " ".join(formatted_prompt.split())
 
             if prompt_input:
@@ -670,40 +669,52 @@ class MuseAutomator:
 
                 # Auto-click any confirmation / option / cleaned-dialogue button if Muse AI prompts for choice
                 clicked_btn = await page.evaluate("""() => {
-                    const clickables = Array.from(document.querySelectorAll('button, [role="button"], [data-slot="button"], [data-testid*="button"], div[class*="rounded"][class*="border"], a[role="button"]'));
-                    
-                    // Priority 1: Suggested clean dialogue / fixed script confirmation
-                    for (const el of clickables) {
-                        const t = (el.innerText || '').toLowerCase().trim();
-                        if (!t) continue;
-                        if (t.includes('dùng thoại') || t.includes('soạn lại') || t.includes('thoại sạch') || t.includes('duyệt thoại') || t.includes('kịch bản sạch')) {
+                    function triggerFullClick(target) {
+                        if (!target) return;
+                        target.scrollIntoView({ block: 'center', behavior: 'instant' });
+                        const events = ['pointerover', 'mouseover', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+                        events.forEach(evType => {
                             try {
-                                el.scrollIntoView({ block: 'center', behavior: 'instant' });
-                                el.click();
-                                return 'Đồng ý thoại sạch: ' + t;
+                                target.dispatchEvent(new MouseEvent(evType, {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: window,
+                                    buttons: 1
+                                }));
                             } catch(e) {}
+                        });
+                        try { target.click(); } catch(e) {}
+                    }
+
+                    // Priority 1: Suggested clean dialogue / fixed script buttons (e.g. "Dùng thoại mình soạn lại này")
+                    const allInteractive = Array.from(document.querySelectorAll('button, [role="button"], [data-slot="button"], [data-testid*="button"], a, div, span'));
+                    for (const el of allInteractive) {
+                        const t = (el.innerText || el.textContent || '').toLowerCase().trim();
+                        if (!t || t.length > 50) continue;
+                        if (t.includes('dùng thoại') || t.includes('soạn lại') || t.includes('thoại sạch') || t.includes('duyệt thoại') || t.includes('kịch bản sạch')) {
+                            const btn = el.closest('button, [role="button"], a') || el;
+                            triggerFullClick(btn);
+                            return 'Đồng ý thoại sạch: ' + t;
                         }
                     }
 
                     // Priority 2: General confirmation & continue buttons
-                    for (const el of clickables) {
-                        const t = (el.innerText || '').toLowerCase().trim();
-                        if (!t) continue;
+                    for (const el of allInteractive) {
+                        const t = (el.innerText || el.textContent || '').toLowerCase().trim();
+                        if (!t || t.length > 50) continue;
                         if (t.includes('dùng ảnh nhân vật') || t.includes('làm cảnh 2') || t.includes('dùng đúng ảnh') ||
                             t.includes('tiếp tục') || t.includes('chọn ảnh') || t.includes('đồng ý') || t.includes('xác nhận') ||
                             t.includes('bản ảnh mới') || t.includes('giữ nguyên') || t.includes('tạo ngay') || t.includes('chấp nhận')) {
-                            try {
-                                el.scrollIntoView({ block: 'center', behavior: 'instant' });
-                                el.click();
-                                return 'Xác nhận: ' + t;
-                            } catch(e) {}
+                            const btn = el.closest('button, [role="button"], a') || el;
+                            triggerFullClick(btn);
+                            return 'Xác nhận: ' + t;
                         }
                     }
                     return null;
                 }""")
                 if clicked_btn:
                     await log_fn(f"Đã tự động bấm '{clicked_btn}' trên Muse AI...", current_pct)
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(1.2)
 
                 # Check if Muse is actively generating
                 is_muse_busy = await page.evaluate("""() => {
@@ -740,8 +751,8 @@ class MuseAutomator:
                     return null;
                 }""")
 
-                if muse_state == 'clean_dialogue' and attempt % 2 == 0 and not is_muse_busy:
-                    await log_fn(f"Phát hiện Muse AI đề xuất duyệt thoại sạch, tự động đồng ý để tạo video Cảnh {scene_number} ngay...", current_pct)
+                if muse_state == 'clean_dialogue' and not is_muse_busy:
+                    await log_fn(f"Phát hiện Muse AI đề xuất duyệt thoại sạch, tự động xác nhận thoại sạch để tạo video Cảnh {scene_number} ngay...", current_pct)
                     try:
                         p_in = await page.query_selector("textarea, div[contenteditable='true']")
                         if p_in:
@@ -755,8 +766,8 @@ class MuseAutomator:
                             await asyncio.sleep(2)
                     except Exception as ex_cd:
                         logger.debug(f"Clean dialogue confirm send error: {ex_cd}")
-                elif muse_state == 'redo' and attempt % 3 == 0 and not is_muse_busy:
-                    await log_fn(f"Phát hiện Muse AI giữ bản cũ không gửi video, tự động yêu cầu tạo bản mới cho Cảnh {scene_number}...", current_pct)
+                elif muse_state == 'redo' and not is_muse_busy:
+                    await log_fn(f"Phát hiện Muse AI giữ bản cũ không tạo mới, tự động yêu cầu tạo bản mới cho Cảnh {scene_number}...", current_pct)
                     try:
                         p_in = await page.query_selector("textarea, div[contenteditable='true']")
                         if p_in:
@@ -852,11 +863,9 @@ class MuseAutomator:
                             if (!src || (!src.startsWith('blob:') && !src.startsWith('http'))) continue;
                             if (vTag && vTag.duration === 5.041667) continue;
 
-                            // Filter out videos that already existed in DOM before this prompt:
+                            // Strictly filter out videos that already existed in DOM before this prompt was sent:
                             if (knownSrcs && knownSrcs.includes(src)) {
-                                const t = (it.innerText || '').toLowerCase();
-                                const isRedelivery = t.includes('gửi lại file') || t.includes('vừa làm xong') || t.includes('đỡ tốn hạn mức');
-                                if (!isRedelivery) continue;
+                                continue;
                             }
 
                             if (!seenSrcs.has(src)) {
@@ -942,13 +951,18 @@ class MuseAutomator:
 
                 # Update current scene in DB
                 p_cur = await ffmpeg_service.probe_video(str(target_file))
+                # Invalidate any old stitched video since scene video is newly updated
                 c_db = _get_raw_conn()
                 c_db.execute("DELETE FROM videos WHERE project_id = ? AND scene_number = ?", (project_id, scene_number))
+                c_db.execute("DELETE FROM exports WHERE project_id = ?", (project_id,))
                 c_db.execute("""
                     INSERT INTO videos (id, project_id, scene_number, video_path, duration, resolution, fps, status)
                     VALUES (?, ?, ?, ?, ?, '1080x1920', 60.0, 'ready')
                 """, (f"v{scene_number}_{project_id[:4]}", project_id, scene_number, str(target_file), p_cur.get("duration", 10.0)))
                 c_db.commit()
+                for exp_f in (PROJECTS_DIR / project_id / "exports").glob("*.mp4"):
+                    try: exp_f.unlink(missing_ok=True)
+                    except Exception: pass
 
                 # If companion video was also returned in this same response, process companion scene!
                 if companion_candidate_src and companion_candidate_src != newest_video.get("src"):
