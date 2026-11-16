@@ -721,6 +721,16 @@ class PipelineRunner:
             if not pending:
                 # If there are projects that failed in this pass, wait 6s and retry them automatically!
                 if attempted_failed_in_pass and not state.get("paused_by_user"):
+                    # Check if at least one video engine is logged in before hammering retries
+                    muse_ok = get_setting("muse_logged_in") == "true"
+                    flow_ok = get_setting("flow_logged_in") == "true"
+                    if not muse_ok and not flow_ok:
+                        logger.info("Batch queue: Chưa kết nối tài khoản Muse AI hoặc Google Flow. Tạm dừng hàng đợi chờ đăng nhập...")
+                        state["paused_for_login"] = True
+                        state["current_project_id"] = None
+                        self.save_batch_state(state)
+                        break
+
                     logger.info(f"Batch queue: Tự động thử lại {len(attempted_failed_in_pass)} dự án chưa hoàn tất...")
                     await asyncio.sleep(6)
                     attempted_failed_in_pass.clear()
