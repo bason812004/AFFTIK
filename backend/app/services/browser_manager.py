@@ -44,36 +44,38 @@ def _kill_orphaned_chrome_for_profile(profile_dir: Path):
 
 def _clean_profile_session(profile_dir: Path):
     """
-    Completely purges cookies, tokens, and cached Google account credentials
+    Completely purges cookies, tokens, and cached account credentials
     from the Chrome profile so the browser opens fresh to a clean login screen.
     """
-    default_dir = profile_dir / "Default"
-    if not default_dir.exists():
-        return
-    targets = [
-        default_dir / "Network" / "Cookies",
-        default_dir / "Network" / "Cookies-journal",
-        default_dir / "Cookies",
-        default_dir / "Cookies-journal",
-        default_dir / "Preferences",
-        default_dir / "Web Data",
-        default_dir / "Web Data-journal",
-        default_dir / "Login Data",
-        default_dir / "Login Data-journal",
-    ]
-    for f in targets:
-        try:
-            if f.exists():
-                f.unlink(missing_ok=True)
-        except Exception:
-            pass
-    for sub in ["Sessions", "Session Storage", "Local Storage", "IndexedDB"]:
-        p = default_dir / sub
-        try:
-            if p.exists() and p.is_dir():
-                shutil.rmtree(str(p), ignore_errors=True)
-        except Exception:
-            pass
+    import shutil
+    dirs_to_check = [profile_dir / "Default", profile_dir]
+    for d in dirs_to_check:
+        if not d.exists():
+            continue
+        targets = [
+            d / "Network" / "Cookies",
+            d / "Network" / "Cookies-journal",
+            d / "Cookies",
+            d / "Cookies-journal",
+            d / "Preferences",
+            d / "Web Data",
+            d / "Web Data-journal",
+            d / "Login Data",
+            d / "Login Data-journal",
+        ]
+        for f in targets:
+            try:
+                if f.exists():
+                    f.unlink(missing_ok=True)
+            except Exception:
+                pass
+        for sub in ["Sessions", "Session Storage", "Local Storage", "IndexedDB", "Network"]:
+            p = d / sub
+            try:
+                if p.exists() and p.is_dir():
+                    shutil.rmtree(str(p), ignore_errors=True)
+            except Exception:
+                pass
 
 
 def _is_hidden_sandbox_desktop() -> bool:
@@ -973,9 +975,9 @@ class BrowserManager:
         _clean_profile_locks(FLOW_PROFILE_DIR)
 
     async def clear_gemini_session(self, open_login: bool = True, full_logout: bool = True):
-        self._gemini_switching = True
+        self._gemini_switching = open_login
         self._gemini_switch_ts = time.time()
-        set_setting("gemini_logged_in", "logged_out")
+        set_setting("gemini_logged_in", "false")
         self._clear_saved_account_info("gemini")
         await self.close_gemini_browser()
         await asyncio.to_thread(_kill_orphaned_chrome_for_profile, GEMINI_PROFILE_DIR)
@@ -999,9 +1001,9 @@ class BrowserManager:
 
     async def clear_flow_session(self, open_login: bool = True, full_logout: bool = True):
         async with self._get_flow_lock():
-            self._flow_switching = True
+            self._flow_switching = open_login
             self._flow_switch_ts = time.time()
-            set_setting("flow_logged_in", "logged_out")
+            set_setting("flow_logged_in", "false")
             self._clear_saved_account_info("flow")
             try:
                 if self.flow_context:
@@ -1017,19 +1019,19 @@ class BrowserManager:
             if full_logout:
                 await asyncio.to_thread(_clean_profile_session, FLOW_PROFILE_DIR)
 
-            if open_login:
-                page = await self.get_flow_page(headed=True, force_headed=True)
-                try:
-                    await page.bring_to_front()
-                except Exception:
-                    pass
-                login_url = (
-                    "https://accounts.google.com/ServiceLogin?continue=https://labs.google/fx/vi/tools/flow&hl=vi"
-                    if full_logout
-                    else "https://accounts.google.com/AccountChooser?continue=https://labs.google/fx/vi/tools/flow&hl=vi"
-                )
-                await self._navigate_fast(page, login_url)
-            return True
+        if open_login:
+            page = await self.get_flow_page(headed=True, force_headed=True)
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
+            login_url = (
+                "https://accounts.google.com/ServiceLogin?continue=https://labs.google/fx/vi/tools/flow&hl=vi"
+                if full_logout
+                else "https://accounts.google.com/AccountChooser?continue=https://labs.google/fx/vi/tools/flow&hl=vi"
+            )
+            await self._navigate_fast(page, login_url)
+        return True
 
     async def _is_muse_page_authenticated(self, page: Page) -> bool:
         """Checks whether Muse AI page is logged in."""
@@ -1043,51 +1045,50 @@ class BrowserManager:
             if "muse.ai" not in host and "musevideo.ai" not in host:
                 return False
 
-            if "/login" in parsed.path or "/join" in parsed.path or "/signup" in parsed.path:
+            if "/login" in parsed.path or "/join" in parsed.path or "/signup" in parsed.path or "/forgot" in parsed.path or "/auth" in parsed.path:
                 return False
 
-            # Check context cookies first
-            try:
-                if page.context:
-                    cookies = await page.context.cookies()
-                    has_muse_cookie = any(
-                        any(k in (c.get("name") or "").lower() for k in ["session", "auth", "token", "muse_", "jwt", "connect.sid"])
-                        for c in cookies
-                        if "muse.ai" in (c.get("domain") or "").lower()
-                    )
-                    if has_muse_cookie and parsed.path in ["/", "/dashboard", "/create", "/videos", "/projects", "/home"]:
-                        return True
-            except Exception:
-                pass
-
             dom_state = await asyncio.wait_for(page.evaluate("""() => {
+                const hasSignIn = Boolean(
+                    document.querySelector("a[href*='/login'], a[href*='/signin'], a[href*='/join'], button[aria-label*='Sign in' i], button[aria-label*='Log in' i]") ||
+                    Array.from(document.querySelectorAll('button, a')).some(b => {
+                        const t = (b.innerText || '').trim().toLowerCase();
+                        return t === 'log in' || t === 'sign in' || t === 'đăng nhập' || t === 'join' || t === 'sign up';
+                    })
+                );
+
                 const hasUserEl = Boolean(
                     document.querySelector(
                         "[aria-label*='account' i], [aria-label*='profile' i], [aria-label*='user' i], " +
-                        "a[href*='/dashboard'], a[href*='/create'], a[href*='/settings'], a[href*='/profile'], " +
-                        ".user-menu, .avatar, img[src*='avatar'], button.user-button, .user-name, [data-user]"
+                        "a[href*='/logout'], a[href*='/signout'], button[aria-label*='logout' i], " +
+                        ".user-menu, .avatar, img[src*='avatar'], button.user-button, .user-name, [data-user], " +
+                        "[data-testid*='profile'], [data-testid*='avatar'], [data-testid*='user']"
                     )
                 );
+
                 let hasLocalAuth = false;
                 try {
-                    hasLocalAuth = Boolean(localStorage.getItem('token') || localStorage.getItem('user') || localStorage.getItem('auth') || localStorage.getItem('sb-access-token'));
+                    hasLocalAuth = Boolean(
+                        localStorage.getItem('token') || 
+                        localStorage.getItem('user') || 
+                        localStorage.getItem('auth') || 
+                        localStorage.getItem('sb-access-token')
+                    );
                 } catch(e) {}
-                const hasSignIn = Boolean(
-                    document.querySelector("a[href*='/login'], a[href*='/signin'], button[aria-label*='Sign in' i], button[aria-label*='Log in' i]") ||
-                    Array.from(document.querySelectorAll('button, a')).some(b => {
-                        const t = (b.innerText || '').trim().toLowerCase();
-                        return t === 'log in' || t === 'sign in' || t === 'đăng nhập';
-                    })
-                );
+
                 return { hasUserEl, hasLocalAuth, hasSignIn };
             }"""), timeout=2.5)
 
-            if dom_state.get("hasUserEl") or dom_state.get("hasLocalAuth"):
-                return True
             if dom_state.get("hasSignIn"):
                 return False
-            if parsed.path in ["/", "/dashboard", "/create", "/videos", "/projects", "/home"] and not dom_state.get("hasSignIn"):
+
+            if dom_state.get("hasUserEl") or dom_state.get("hasLocalAuth"):
                 return True
+
+            # Inside authenticated application pages without sign-in buttons
+            if parsed.path in ["/create", "/dashboard", "/videos", "/projects", "/workbench", "/studio"] and not dom_state.get("hasSignIn"):
+                return True
+
             return False
         except Exception:
             return False
@@ -1274,9 +1275,9 @@ class BrowserManager:
 
     async def clear_muse_session(self, open_login: bool = True, full_logout: bool = True):
         async with self._get_muse_lock():
-            self._muse_switching = True
+            self._muse_switching = open_login
             self._muse_switch_ts = time.time()
-            set_setting("muse_logged_in", "logged_out")
+            set_setting("muse_logged_in", "false")
             self._clear_saved_account_info("muse")
             # In-memory clean first
             try:
@@ -1293,15 +1294,15 @@ class BrowserManager:
             if full_logout:
                 await asyncio.to_thread(_clean_profile_session, MUSE_PROFILE_DIR)
 
-            if open_login:
-                page = await self.get_muse_page(headed=True, force_headed=True)
-                try:
-                    await page.bring_to_front()
-                except Exception:
-                    pass
-                login_url = "https://muse.ai/login"
-                await self._navigate_fast(page, login_url)
-            return True
+        if open_login:
+            page = await self.get_muse_page(headed=True, force_headed=True)
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
+            login_url = "https://muse.ai/login"
+            await self._navigate_fast(page, login_url)
+        return True
 
     async def close_all(self):
         await self.close_gemini_browser()

@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   Settings,
-  Tv
+  Tv,
+  XCircle
 } from 'lucide-react';
 import { api } from '../api';
 
@@ -25,6 +26,7 @@ export const MuseStudioView: React.FC<MuseStudioViewProps> = ({
 }) => {
   const [connecting, setConnecting] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [museUrl, setMuseUrl] = useState('https://muse.ai');
   const [savingUrl, setSavingUrl] = useState(false);
 
@@ -43,12 +45,24 @@ export const MuseStudioView: React.FC<MuseStudioViewProps> = ({
   const handleLogout = async () => {
     try {
       setLoggingOut(true);
-      await api.logoutMuse(true);
+      await api.logoutMuse(true, true);
       await onRefresh();
     } catch (e: any) {
       alert(e.message);
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      setDisconnecting(true);
+      await api.disconnectMuse();
+      await onRefresh();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -126,6 +140,18 @@ export const MuseStudioView: React.FC<MuseStudioViewProps> = ({
               {loggingOut ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
               <span>{loggingOut ? 'Đang mở form...' : '🔄 Đổi Tài Khoản Khác'}</span>
             </button>
+
+            {status?.logged_in && (
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/40 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                title="Đăng xuất và đóng trình duyệt Muse AI"
+              >
+                {disconnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5 text-rose-400" />}
+                <span>{disconnecting ? 'Đang thoát...' : '🚪 Thoát TK'}</span>
+              </button>
+            )}
 
             <button
               onClick={onRefresh}

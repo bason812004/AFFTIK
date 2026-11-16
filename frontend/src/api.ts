@@ -297,8 +297,13 @@ export const api = {
     return handleResponse(res);
   },
 
-  async logoutGemini(fullLogout: boolean = true) {
-    const res = await fetch(`${API_BASE}/gemini/logout?full_logout=${fullLogout}`, { method: 'POST' });
+  async logoutGemini(fullLogout: boolean = true, openLogin: boolean = true) {
+    const res = await fetch(`${API_BASE}/gemini/logout?full_logout=${fullLogout}&open_login=${openLogin}`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  async disconnectGemini() {
+    const res = await fetch(`${API_BASE}/gemini/disconnect`, { method: 'POST' });
     return handleResponse(res);
   },
 
@@ -345,8 +350,13 @@ export const api = {
     return handleResponse(res);
   },
 
-  async logoutFlow(fullLogout: boolean = true) {
-    const res = await fetch(`${API_BASE}/flow/logout?full_logout=${fullLogout}`, { method: 'POST' });
+  async logoutFlow(fullLogout: boolean = true, openLogin: boolean = true) {
+    const res = await fetch(`${API_BASE}/flow/logout?full_logout=${fullLogout}&open_login=${openLogin}`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  async disconnectFlow() {
+    const res = await fetch(`${API_BASE}/flow/disconnect`, { method: 'POST' });
     return handleResponse(res);
   },
 
@@ -379,8 +389,13 @@ export const api = {
     return handleResponse(res);
   },
 
-  async logoutMuse(fullLogout: boolean = true) {
-    const res = await fetch(`${API_BASE}/muse/logout?full_logout=${fullLogout}`, { method: 'POST' });
+  async logoutMuse(fullLogout: boolean = true, openLogin: boolean = true) {
+    const res = await fetch(`${API_BASE}/muse/logout?full_logout=${fullLogout}&open_login=${openLogin}`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  async disconnectMuse() {
+    const res = await fetch(`${API_BASE}/muse/disconnect`, { method: 'POST' });
     return handleResponse(res);
   },
 

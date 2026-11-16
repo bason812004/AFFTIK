@@ -27,9 +27,17 @@ async def connect_gemini():
     return await browser_manager.check_gemini_login(force_open=True)
 
 @router.post("/logout")
-async def logout_gemini(full_logout: bool = True):
-    await browser_manager.clear_gemini_session(open_login=True, full_logout=full_logout)
-    return {"success": True, "message": "Đã đăng xuất tài khoản Gemini và mở cửa sổ đăng nhập tài khoản mới"}
+async def logout_gemini(full_logout: bool = True, open_login: bool = True):
+    await browser_manager.clear_gemini_session(open_login=open_login, full_logout=full_logout)
+    return {
+        "success": True, 
+        "message": "Đã đăng xuất tài khoản Gemini" + (" và mở cửa sổ đăng nhập tài khoản mới" if open_login else " và đóng trình duyệt")
+    }
+
+@router.post("/disconnect")
+async def disconnect_gemini():
+    await browser_manager.clear_gemini_session(open_login=False, full_logout=True)
+    return {"success": True, "message": "Đã thoát và đóng tài khoản Gemini"}
 
 @router.post("/generate-character")
 async def generate_character(

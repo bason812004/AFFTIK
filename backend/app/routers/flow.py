@@ -40,14 +40,19 @@ async def connect_flow(db = Depends(get_db)):
     return st
 
 @router.post("/logout")
-async def logout_flow(full_logout: bool = True):
-    await browser_manager.clear_flow_session(open_login=True, full_logout=full_logout)
-    if pipeline_runner.get_paused_session():
+async def logout_flow(full_logout: bool = True, open_login: bool = True):
+    await browser_manager.clear_flow_session(open_login=open_login, full_logout=full_logout)
+    if pipeline_runner.get_paused_session() and open_login:
         pipeline_runner.start_account_switch_watcher()
     return {
         "success": True,
-        "message": "Đã đăng xuất tài khoản Google Flow cũ và mở cửa sổ đăng nhập tài khoản mới. Ngay sau khi đăng nhập xong, hệ thống sẽ tự động chạy tiếp phiên làm việc đang dang dở!"
+        "message": "Đã đăng xuất tài khoản Google Flow cũ" + (" và mở cửa sổ đăng nhập tài khoản mới." if open_login else " và đóng trình duyệt.")
     }
+
+@router.post("/disconnect")
+async def disconnect_flow():
+    await browser_manager.clear_flow_session(open_login=False, full_logout=True)
+    return {"success": True, "message": "Đã thoát và đóng tài khoản Google Flow"}
 
 @router.post("/generate-fast-video")
 async def generate_fast_video(

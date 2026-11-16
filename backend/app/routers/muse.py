@@ -29,9 +29,17 @@ async def connect_muse(db = Depends(get_db)):
     return await browser_manager.check_muse_login(muse_url, force_open=True)
 
 @router.post("/logout")
-async def logout_muse(full_logout: bool = True):
-    await browser_manager.clear_muse_session(open_login=True, full_logout=full_logout)
-    return {"success": True, "message": "Đã đăng xuất tài khoản Muse AI cũ và mở cửa sổ đăng nhập mới"}
+async def logout_muse(full_logout: bool = True, open_login: bool = True):
+    await browser_manager.clear_muse_session(open_login=open_login, full_logout=full_logout)
+    return {
+        "success": True,
+        "message": "Đã đăng xuất tài khoản Muse AI cũ" + (" và mở cửa sổ đăng nhập mới" if open_login else " và đóng trình duyệt")
+    }
+
+@router.post("/disconnect")
+async def disconnect_muse():
+    await browser_manager.clear_muse_session(open_login=False, full_logout=True)
+    return {"success": True, "message": "Đã thoát và đóng tài khoản Muse AI"}
 
 @router.post("/generate-video")
 async def generate_muse_video(

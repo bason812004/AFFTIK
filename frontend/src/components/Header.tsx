@@ -9,7 +9,8 @@ import {
   Sliders,
   Tv,
   RefreshCw,
-  UserCheck
+  UserCheck,
+  LogOut
 } from 'lucide-react';
 import { api } from '../api';
 
@@ -44,10 +45,13 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [connectingGemini, setConnectingGemini] = useState(false);
   const [switchingGemini, setSwitchingGemini] = useState(false);
+  const [disconnectingGemini, setDisconnectingGemini] = useState(false);
   const [connectingFlow, setConnectingFlow] = useState(false);
   const [switchingFlow, setSwitchingFlow] = useState(false);
+  const [disconnectingFlow, setDisconnectingFlow] = useState(false);
   const [connectingMuse, setConnectingMuse] = useState(false);
   const [switchingMuse, setSwitchingMuse] = useState(false);
+  const [disconnectingMuse, setDisconnectingMuse] = useState(false);
 
   const handleConnectGemini = async () => {
     try {
@@ -71,6 +75,19 @@ export const Header: React.FC<HeaderProps> = ({
       console.error(err);
     } finally {
       setSwitchingGemini(false);
+    }
+  };
+
+  const handleDisconnectGeminiAccount = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      setDisconnectingGemini(true);
+      await api.disconnectGemini();
+      await onRefreshStatus();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDisconnectingGemini(false);
     }
   };
 
@@ -99,6 +116,19 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  const handleDisconnectFlowAccount = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      setDisconnectingFlow(true);
+      await api.disconnectFlow();
+      await onRefreshStatus();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDisconnectingFlow(false);
+    }
+  };
+
   const handleConnectMuse = async () => {
     try {
       setConnectingMuse(true);
@@ -121,6 +151,19 @@ export const Header: React.FC<HeaderProps> = ({
       console.error(err);
     } finally {
       setSwitchingMuse(false);
+    }
+  };
+
+  const handleDisconnectMuseAccount = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      setDisconnectingMuse(true);
+      await api.disconnectMuse();
+      await onRefreshStatus();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDisconnectingMuse(false);
     }
   };
 
@@ -233,6 +276,21 @@ export const Header: React.FC<HeaderProps> = ({
               <RefreshCw className={`w-3 h-3 ${switchingGemini ? 'animate-spin' : ''}`} />
               <span>{geminiStatus?.logged_in ? 'Đổi TK' : 'Chọn TK'}</span>
             </button>
+            {geminiStatus?.logged_in && (
+              <button
+                onClick={handleDisconnectGeminiAccount}
+                disabled={disconnectingGemini}
+                title="Đăng xuất và đóng trình duyệt Gemini"
+                className="px-2 py-1.5 border-l border-cyan-500/25 bg-slate-800/40 hover:bg-rose-500/30 text-[11px] font-bold text-slate-300 hover:text-rose-200 flex items-center gap-1 transition-colors"
+              >
+                {disconnectingGemini ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <LogOut className="w-3 h-3" />
+                )}
+                <span>Thoát</span>
+              </button>
+            )}
           </div>
 
           {/* Google Flow Account Badge */}
@@ -280,6 +338,17 @@ export const Header: React.FC<HeaderProps> = ({
               <RefreshCw className={`w-3 h-3 ${switchingFlow ? 'animate-spin' : ''}`} />
               <span>{flowStatus?.logged_in ? 'Đổi TK Flow' : 'Chọn TK Flow'}</span>
             </button>
+            {flowStatus?.logged_in && (
+              <button
+                onClick={handleDisconnectFlowAccount}
+                disabled={disconnectingFlow}
+                title="Đăng xuất và đóng trình duyệt Google Flow"
+                className="px-2 py-1.5 border-l border-purple-500/30 bg-slate-800/40 hover:bg-rose-500/30 text-[11px] font-bold text-slate-300 hover:text-rose-200 flex items-center gap-1 transition-colors"
+              >
+                <LogOut className={`w-3 h-3 ${disconnectingFlow ? 'animate-spin' : ''}`} />
+                <span>Thoát</span>
+              </button>
+            )}
           </div>
 
           {/* Muse AI Account Badge */}
@@ -327,6 +396,17 @@ export const Header: React.FC<HeaderProps> = ({
               <RefreshCw className={`w-3 h-3 ${switchingMuse ? 'animate-spin' : ''}`} />
               <span>{museStatus?.logged_in ? 'Đổi TK' : 'Chọn TK'}</span>
             </button>
+            {museStatus?.logged_in && (
+              <button
+                onClick={handleDisconnectMuseAccount}
+                disabled={disconnectingMuse}
+                title="Đăng xuất và đóng trình duyệt Muse AI"
+                className="px-2 py-1.5 border-l border-emerald-500/30 bg-slate-800/40 hover:bg-rose-500/30 text-[11px] font-bold text-slate-300 hover:text-rose-200 flex items-center gap-1 transition-colors"
+              >
+                <LogOut className={`w-3 h-3 ${disconnectingMuse ? 'animate-spin' : ''}`} />
+                <span>Thoát</span>
+              </button>
+            )}
           </div>
 
           {/* FFmpeg */}

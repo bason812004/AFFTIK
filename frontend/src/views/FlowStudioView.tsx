@@ -9,7 +9,8 @@ import {
   Loader2, 
   CheckCircle2, 
   AlertCircle,
-  Settings
+  Settings,
+  XCircle
 } from 'lucide-react';
 import { api } from '../api';
 
@@ -24,6 +25,7 @@ export const FlowStudioView: React.FC<FlowStudioViewProps> = ({
 }) => {
   const [connecting, setConnecting] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [flowUrl, setFlowUrl] = useState('https://labs.google/flow');
   const [savingUrl, setSavingUrl] = useState(false);
 
@@ -42,12 +44,24 @@ export const FlowStudioView: React.FC<FlowStudioViewProps> = ({
   const handleLogout = async () => {
     try {
       setLoggingOut(true);
-      await api.logoutFlow();
+      await api.logoutFlow(true, true);
       await onRefresh();
     } catch (e: any) {
       alert(e.message);
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      setDisconnecting(true);
+      await api.disconnectFlow();
+      await onRefresh();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -123,6 +137,18 @@ export const FlowStudioView: React.FC<FlowStudioViewProps> = ({
               {loggingOut ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
               <span>{loggingOut ? 'Đang mở form...' : '🔄 Đổi Tài Khoản Khác'}</span>
             </button>
+
+            {status?.logged_in && (
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/40 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                title="Đăng xuất và đóng trình duyệt Google Flow"
+              >
+                {disconnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5 text-rose-400" />}
+                <span>{disconnecting ? 'Đang thoát...' : '🚪 Thoát TK'}</span>
+              </button>
+            )}
 
             <button
               onClick={onRefresh}

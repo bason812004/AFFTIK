@@ -9,7 +9,8 @@ import {
   Loader2, 
   Send,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  XCircle
 } from 'lucide-react';
 import { api } from '../api';
 
@@ -24,6 +25,7 @@ export const GeminiStudioView: React.FC<GeminiStudioViewProps> = ({
 }) => {
   const [connecting, setConnecting] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [testPrompt, setTestPrompt] = useState('Hãy chào người dùng TikTok Việt Nam bằng 1 câu hook ngắn 10 từ');
   const [testResult, setTestResult] = useState('');
   const [testing, setTesting] = useState(false);
@@ -43,12 +45,24 @@ export const GeminiStudioView: React.FC<GeminiStudioViewProps> = ({
   const handleLogout = async () => {
     try {
       setLoggingOut(true);
-      await api.logoutGemini(true);
+      await api.logoutGemini(true, true);
       await onRefresh();
     } catch (e: any) {
       alert(e.message);
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      setDisconnecting(true);
+      await api.disconnectGemini();
+      await onRefresh();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -118,6 +132,18 @@ export const GeminiStudioView: React.FC<GeminiStudioViewProps> = ({
               {loggingOut ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
               <span>{loggingOut ? 'Đang mở Chrome...' : '🔄 Đổi Tài Khoản Khác'}</span>
             </button>
+
+            {status?.logged_in && (
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/40 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                title="Đăng xuất và đóng trình duyệt Gemini"
+              >
+                {disconnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5 text-rose-400" />}
+                <span>{disconnecting ? 'Đang thoát...' : '🚪 Thoát TK'}</span>
+              </button>
+            )}
           </div>
         </div>
 
