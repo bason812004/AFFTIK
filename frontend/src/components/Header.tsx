@@ -264,18 +264,20 @@ export const Header: React.FC<HeaderProps> = ({
                   {geminiAccountLabel || 'Đã kết nối'}
                 </span>
               ) : (
-                <span className="font-bold text-amber-300">Đăng nhập (Chọn TK)</span>
+                <span className="font-bold text-amber-300">🔑 Đăng nhập</span>
               )}
             </button>
-            <button
-              onClick={handleSwitchGeminiAccount}
-              disabled={switchingGemini}
-              title="Mở form Google Account Chooser để chọn hoặc đổi tài khoản Gemini"
-              className="px-2 py-1.5 border-l border-cyan-500/25 bg-cyan-500/15 hover:bg-cyan-500/30 text-[11px] font-bold text-cyan-200 flex items-center gap-1 transition-colors"
-            >
-              <RefreshCw className={`w-3 h-3 ${switchingGemini ? 'animate-spin' : ''}`} />
-              <span>{geminiStatus?.logged_in ? 'Đổi TK' : 'Chọn TK'}</span>
-            </button>
+            {geminiStatus?.logged_in && (
+              <button
+                onClick={handleSwitchGeminiAccount}
+                disabled={switchingGemini}
+                title="Mở form Google Account Chooser để chọn hoặc đổi tài khoản Gemini"
+                className="px-2 py-1.5 border-l border-cyan-500/25 bg-cyan-500/15 hover:bg-cyan-500/30 text-[11px] font-bold text-cyan-200 flex items-center gap-1 transition-colors"
+              >
+                <RefreshCw className={`w-3 h-3 ${switchingGemini ? 'animate-spin' : ''}`} />
+                <span>Đổi TK</span>
+              </button>
+            )}
             {geminiStatus?.logged_in && (
               <button
                 onClick={handleDisconnectGeminiAccount}
@@ -325,19 +327,21 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               ) : (
                 <span className="font-extrabold text-amber-300 animate-pulse">
-                  Đăng nhập (Chọn TK Google)
+                  🔑 Đăng nhập Google Flow
                 </span>
               )}
             </button>
-            <button
-              onClick={handleSwitchFlowAccount}
-              disabled={switchingFlow}
-              title="Mở form Google Account Chooser (Chọn một tài khoản) để chọn hoặc đổi tài khoản Google Flow"
-              className="px-2.5 py-1.5 border-l border-purple-500/30 bg-rose-500/25 hover:bg-rose-500/40 text-[11px] font-extrabold text-rose-200 flex items-center gap-1 transition-colors"
-            >
-              <RefreshCw className={`w-3 h-3 ${switchingFlow ? 'animate-spin' : ''}`} />
-              <span>{flowStatus?.logged_in ? 'Đổi TK Flow' : 'Chọn TK Flow'}</span>
-            </button>
+            {flowStatus?.logged_in && (
+              <button
+                onClick={handleSwitchFlowAccount}
+                disabled={switchingFlow}
+                title="Mở form Google Account Chooser (Chọn một tài khoản) để chọn hoặc đổi tài khoản Google Flow"
+                className="px-2.5 py-1.5 border-l border-purple-500/30 bg-rose-500/25 hover:bg-rose-500/40 text-[11px] font-extrabold text-rose-200 flex items-center gap-1 transition-colors"
+              >
+                <RefreshCw className={`w-3 h-3 ${switchingFlow ? 'animate-spin' : ''}`} />
+                <span>Đổi TK Flow</span>
+              </button>
+            )}
             {flowStatus?.logged_in && (
               <button
                 onClick={handleDisconnectFlowAccount}
@@ -383,19 +387,21 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               ) : (
                 <span className="font-extrabold text-amber-300 animate-pulse">
-                  Đăng nhập Muse AI
+                  🔑 Đăng nhập Muse AI
                 </span>
               )}
             </button>
-            <button
-              onClick={handleSwitchMuseAccount}
-              disabled={switchingMuse}
-              title="Mở cửa sổ Chrome để đổi hoặc đăng nhập tài khoản Muse AI mới"
-              className="px-2.5 py-1.5 border-l border-emerald-500/30 bg-rose-500/25 hover:bg-rose-500/40 text-[11px] font-extrabold text-rose-200 flex items-center gap-1 transition-colors"
-            >
-              <RefreshCw className={`w-3 h-3 ${switchingMuse ? 'animate-spin' : ''}`} />
-              <span>{museStatus?.logged_in ? 'Đổi TK' : 'Chọn TK'}</span>
-            </button>
+            {museStatus?.logged_in && (
+              <button
+                onClick={handleSwitchMuseAccount}
+                disabled={switchingMuse}
+                title="Mở cửa sổ Chrome để đổi hoặc đăng nhập tài khoản Muse AI mới"
+                className="px-2.5 py-1.5 border-l border-emerald-500/30 bg-rose-500/25 hover:bg-rose-500/40 text-[11px] font-extrabold text-rose-200 flex items-center gap-1 transition-colors"
+              >
+                <RefreshCw className={`w-3 h-3 ${switchingMuse ? 'animate-spin' : ''}`} />
+                <span>Đổi TK</span>
+              </button>
+            )}
             {museStatus?.logged_in && (
               <button
                 onClick={handleDisconnectMuseAccount}
